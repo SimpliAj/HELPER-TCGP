@@ -1,6 +1,6 @@
 # 🎴 TCGP Bot - Trading Card Game Pack Manager
 
-> A Discord bot for managing and automating Pokémon Trading Card Game (TCG) pack distributions and validations across Discord servers.
+> A Discord bot for managing and automating Pokémon Trading Card Game (TCG) pack distributions and validations across Discord servers using Arturo-1212's TCG Pocket Rerolling Bot.
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![discord.py 2.0+](https://img.shields.io/badge/discord.py-2.0%2B-blue)](https://github.com/Rapptz/discord.py)
