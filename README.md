@@ -13,22 +13,24 @@
 ## ✨ Features
 
 ### 🎯 Core Features
-- **Automatic Setup** - Guided setup wizard for easy configuration
-- **Pack Management** - Create, manage, and organize TCG packs
-- **Keyword Filtering** - Automatic message forwarding based on keywords
-- **God Pack Validation** - Validate "God Packs" with Approval/Rejection buttons
-- **Safe 4 Trade Tracking** - Track traded cards with modal input
-- **Global Statistics** - Aggregated stats across all servers
-- **Heartbeat Monitoring** - Real-time status monitoring
+- **Automated Setup Wizard** - Interactive step-by-step configuration for servers
+- **Keyword & Pack Detection** - Automatic message detection and filtering
+- **God Pack Validation** - Approve/reject validation buttons with modal tracking
+- **Safe 4 Trade Tracking** - Modal-based card trade documentation
+- **Multi-Series Support** - A-Series, B-Series, and infinitely expandable pack management
+- **Guild-Specific Configs** - Independent settings per server with auto-recovery
+- **Webhook Logging** - Error and warning logging to Discord webhooks
+- **Global Statistics** - Aggregated stats tracking across all servers
+- **Heartbeat Monitoring** - Real-time status monitoring with auto-updating embeds
 
 ### 📊 Functionality
-- **25+ Slash Commands** - Modern slash command structure with autocomplete
-- **Guild-Specific Configs** - Different settings per server
-- **Automatic Channel Creation** - Smart auto-create with fallback logic
-- **Role-Based Pings** - Custom pings for God Pack, Invalid God Pack, Safe 4 Trade
-- **Background Tasks** - Auto-cleanup, heartbeat monitor, stats updates
-- **Webhook Logging** - Log errors and warnings in Discord channels
-- **Multi-Series Support** - A-Series, B-Series, and infinitely expandable
+- **26+ Slash Commands** - Modern slash command interface with autocomplete support
+- **Automatic Channel Creation** - Auto-create channels by series or by pack with smart fallback logic
+- **Role-Based Pings** - Custom pings for God Pack, Invalid God Pack, Safe 4 Trade notifications
+- **Background Tasks** - Auto-cleanup, heartbeat monitor, stats updates running continuously
+- **Thread-Safe Config** - Synchronized config saves preventing race conditions
+- **Auto-Recovery** - Automatic recovery from corrupted guild configs with backup system
+- **Configuration Cleanup** - Auto-extraction of stray guild data from global config
 
 ## 🚀 Quick Start
 
@@ -42,13 +44,13 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/tcgp-bot.git
-   cd tcgp-bot/tcgp-v2
+   git clone https://github.com/yourusername/HELPER-TCGP.git
+   cd HELPER-TCGP
    ```
 
 2. **Install dependencies**
    ```bash
-   pip install discord.py python-dotenv
+   pip install discord.py python-dotenv aiohttp
    ```
 
 3. **Set up environment variables**
@@ -57,15 +59,9 @@
    DISCORD_TOKEN=your_bot_token_here
    ```
 
-4. **Configure bot**
+4. **Start the bot**
    ```bash
-   # Customize bot_config.json with your packs and webhooks
-   cp bot_config.json.example bot_config.json
-   ```
-
-5. **Start the bot**
-   ```bash
-   python main.py
+   python bot.py
    ```
 
 ## 📋 Commands
@@ -74,47 +70,47 @@
 
 | Command | Description | Permission |
 |---------|------------|-----------|
-| `/setup` | Guided setup wizard for server configuration | Admin |
-| `/setfilter <keyword> [channel] [sources]` | Configure filters for keywords | Admin |
-| `/setpackfilter <pack> [channel] [sources]` | Configure filters for packs | Admin |
-| `/clearfilters <type>` | Clear all filters of a type | Admin |
-| `/setpackmode <mode>` | Change pack channel mode (series/pack) | Admin |
-| `/resetsources` | Reset source channels | Admin |
-| `/setvalidatorrole <role>` | Set validator role for buttons | Admin |
-| `/setpingroles <type> <role>` | Set ping roles | Admin |
-| `/setheartbeat <source> <target>` | Configure heartbeat monitoring | Admin |
-| `/setstatus <true/false>` | Enable/Disable traded buttons | Admin |
+| `/setup` | Automated setup wizard for bot channels, categories, and configurations | Admin |
+| `/setfilter` | Configuration of filters for TCGP rerolling keywords | Admin |
+| `/setpackfilter` | Configuration of filters for pack channels | Admin |
+| `/clearfilters` | Clear all filters of a selected type | Admin |
+| `/setpackmode` | Change pack channel mode after setup (series/pack) | Admin |
+| `/resetsources` | Set or reset source channels | Admin |
+| `/setvalidatorrole` | Set validator role for validation buttons | Admin |
+| `/setpingroles` | Set ping roles for god pack, invalid god pack, or safe 4 trade | Admin |
+| `/setheartbeat` | Set source and target channels for heartbeat stats | Admin |
+| `/setstatus` | Enable/disable traded buttons for Safe 4 Trade embeds | Admin |
+| `/createpackcategory` | Create category for a pack with Safe 4 Trade channels | Admin |
 
 ### 📦 Pack Management
 
 | Command | Description | Permission |
 |---------|------------|-----------|
-| `/addseries <name>` | Add new pack series | Owner |
-| `/addpack <name> [series]` | Add new pack | Owner |
-| `/removepack <name>` | Remove pack | Owner |
-| `/removeseries <name>` | Remove series (all packs) | Owner |
-| `/createpackcategory <pack>` | Create category for pack | Admin |
+| `/addseries` | Add new pack series to configuration (auto-creates in all setup guilds) | Owner |
+| `/addpack` | Add new pack to list (auto-creates channels in all setup guilds) | Owner |
+| `/removepack` | Remove pack from list (deletes channels if in pack mode) | Owner |
+| `/removeseries` | Remove series globally and delete all channels/categories in all setup guilds | Owner |
 
 ### 📊 Statistics & Info
 
 | Command | Description | Permission |
 |---------|------------|-----------|
-| `/stats [channel]` | Display server statistics | Everyone |
-| `/detailedstats [channel]` | Display detailed filter statistics | Everyone |
-| `/packstats [channel]` | Display pack statistics | Everyone |
-| `/lifetimestats [channel]` | Display global lifetime statistics | Owner |
-| `/meta` | Show TCGP meta decks | Everyone |
-| `/showfilters` | Show all active filters | Everyone |
+| `/stats` | Show server validation and trade stats, optionally posts auto-updating embed | Everyone |
+| `/detailedstats` | Show detailed statistics for each filter, optionally posts auto-updating embed | Everyone |
+| `/packstats` | Show pack statistics for server, optionally posts auto-updating embed | Everyone |
+| `/lifetimestats` | Show lifetime statistics across all servers | Owner |
+| `/meta` | Show current TCGP meta decks | Everyone |
+| `/showfilters` | Show all active filters for server | Everyone |
 
 ### 🎮 Utility Commands
 
 | Command | Description | Permission |
 |---------|------------|-----------|
-| `/removefilter <keyword>` | Remove a filter | Admin |
-| `/removepackfilter <pack>` | Remove pack filter | Admin |
-| `/pick4me` | Make a random selection | Everyone |
-| `/help` | Show all commands | Everyone |
-| `/sync` | Sync slash commands | Owner |
+| `/removefilter` | Remove a filter from configuration | Admin |
+| `/removepackfilter` | Remove pack filter from configuration | Admin |
+| `/pick4me` | Let fate decide which card you get! | Everyone |
+| `/help` | Show overview of all bot commands | Everyone |
+| `/sync` | Synchronize all slash commands | Owner |
 
 ## ⚙️ Configuration
 
@@ -158,52 +154,50 @@
 ## 📁 Project Structure
 
 ```
-tcgp-v2/
-├── main.py                      # Bot initialization & event handler
-├── config.py                    # Config management (global & guild-specific)
-├── utils.py                     # Constants, embeds, helper functions
-├── webhooks.py                  # Discord webhook logging
+HELPER-TCGP/
+├── bot.py                       # Main bot file with all commands and logic (5000+ lines)
+│   ├── Core bot setup and intents
+│   ├── Config management (load/save)
+│   ├── Guild config system with auto-recovery
+│   ├── 26+ slash commands
+│   ├── Event handlers (on_ready, on_guild_join, etc.)
+│   ├── Background tasks (cleanup, stats update, lifetime stats)
+│   ├── Message handler (keyword/pack detection, forwarding)
+│   ├── Validation views (god packs, safe 4 trade, modals)
+│   └── Statistics tracking system
 │
-├── commands/
-│   ├── admin.py                # Admin commands (filters, mode, sources)
-│   ├── setup.py                # /setup command & wizard
-│   ├── stats.py                # Stats commands (/stats, /meta, /setpingroles)
-│   ├── utility.py              # Utility commands (help, pick4me, etc.)
-│   ├── pack_management.py      # Pack management (add/remove packs & series)
-│   └── dev.py                  # Developer commands
-│
-├── handlers/
-│   └── message.py              # Message event handler (forwarding, detection)
-│
-├── views/
-│   ├── validation.py           # Validation views (god pack, traded, modal)
-│   └── setup_views.py          # Setup wizard views
-│
-├── guild_configs/              # Guild-specific configurations
+├── bot_config.json             # Global bot configuration (series, packs, webhooks)
+├── guild_configs/              # Guild-specific configurations (auto-created)
 │   └── guild_<id>.json
 │
-├── bot_config.json             # Global bot configuration
-└── README.md                   # This file
+├── README.md                   # This file
+├── PRIVACY_POLICY.md           # Privacy policy
+├── TERMS_OF_SERVICE.md         # Terms of service
+└── lifetime_stats_messages.json # Global statistics data (auto-created)
 ```
 
 ## 🔄 Message Handler Logic
 
-The bot monitors all messages and:
+The bot monitors all messages in configured servers and:
 
-1. **Keyword Detection** - Detects configured keywords (e.g., "god pack", "one star")
-2. **Pack Detection** - Searches for pack names with word-boundary matching
-3. **Channel Filtering** - Checks if message is from allowed channel
-4. **Validation Buttons** - Shows approval/rejection buttons for god packs
-5. **Traded Tracking** - Modal for "Traded" status for safe 4 trade
-6. **Statistics** - Updates filter and pack statistics
+1. **Keyword Detection** - Scans for configured keywords (e.g., "god pack", "one star") with regex support
+2. **Pack Detection** - Searches for pack names using word-boundary matching
+3. **Channel Filtering** - Validates message source against configured source channels
+4. **Auto-Forwarding** - Forwards matched messages to destination channels
+5. **Validation Buttons** - Shows approval/rejection buttons for god pack detections
+6. **Traded Tracking** - Displays modal for "Traded" status tracking on Safe 4 Trade embeds
+7. **Statistics** - Automatically updates filter and pack statistics
 
 ## 🎛️ Background Tasks
 
 | Task | Interval | Function |
 |------|----------|---------|
 | `auto_cleanup_task()` | 60s | Cleans up guilds the bot has left |
-| `heartbeat_monitor()` | 5min | Updates heartbeat status |
-| `lifetime_stats_update_task()` | 60min | Updates global lifetime stats |
+| `update_stats_message()` | On-demand | Updates server validation stats embed |
+| `update_detailed_stats_message()` | On-demand | Updates detailed filter statistics embed |
+| `update_pack_stats_message()` | On-demand | Updates pack statistics embed |
+| `update_heartbeat_message()` | 5min | Updates heartbeat status message |
+| `lifetime_stats_update_task()` | 60min | Updates global lifetime statistics |
 
 ## 🔐 Permission System
 
@@ -292,36 +286,4 @@ Contributions are welcome! Please:
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
-## 👨‍💼 Support
-
-Having issues or questions?
-- 🐛 [Open an issue](https://github.com/yourusername/tcgp-bot/issues)
-- 💬 [Start a discussion](https://github.com/yourusername/tcgp-bot/discussions)
-- 📧 Contact the maintainer
-
 ---
-
-**Made with ❤️ for the TCG Pokémon Community**
-
-**Version:** 2.0.0 (Full Refactor)  
-**Status:** Production Ready ✅  
-**Last Updated:** January 2026
-- commands/setup.py: /setup command with all views
-- commands/admin.py: /clearfilters, /setpackmode, /resetsources
-- commands/stats.py: Stats, meta, and monitoring commands
-- views/setup_views.py: All setup wizard views
-- handlers/message.py: Message forwarding and pack detection
-- main.py: Bot initialization and event handling
-
-APPROACH:
----------
-
-Option 1 (RECOMMENDED): Keep using tester.py as-is
-- The refactored modules (config, utils, webhooks, views) can be imported into tester.py
-- This is a gradual migration approach
-- No risk of breaking existing functionality
-
-Option 2: Full Refactoring
-- Complete extraction of all 4600+ lines
-- Takes significant time and testing
-- Better for long-term maintenance
