@@ -8,7 +8,7 @@
 [![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](README.md)
 
 
- [Invite Discord Bot](https://discord.com/channels/1330305075393986703/1433117463104585958/1433117463104585958)
+ [Invite Discord Bot](https://discord.com/oauth2/authorize?client_id=1389046915928162424&permissions=268437520&integration_type=0&scope=bot)
 
 ## ✨ Features
 
