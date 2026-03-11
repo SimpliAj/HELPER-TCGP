@@ -293,31 +293,11 @@ Important events are logged in the console:
 - Task executions
 - Errors & warnings
 
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
 ## 👨‍💼 Support
 
 Having issues or questions?
-- 🐛 [Open an issue](https://github.com/yourusername/tcgp-bot/issues)
-- 💬 [Start a discussion](https://github.com/yourusername/tcgp-bot/discussions)
-- 📧 Contact the maintainer
+- 💬 [Discord](https://discord.gg/X5YKZBh9xV)
+
 
 ---
-
-**Made with ❤️ for the TCG Pokémon Community**
-
-**Version:** 1.0.0  
-**Status:** Production Ready ✅  
-**Last Updated:** March 2026  
-**Bot Architecture:** Monolithic (Single bot.py, 5000+ lines)
