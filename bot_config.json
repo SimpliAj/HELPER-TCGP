@@ -51,8 +51,8 @@
         "Parade",
         "PaldeanWonders"
     ],
-    "error_webhook_url": "https://discord.com/api/webhooks/1466491180136005846/AzmeWXoWRTADUXVpvlCvdKB6p_BXQJfZ9MztwiT5wdnB4h-Z1-vmYSj4Pe28bsF7BE9r",
-    "permission_warning_webhook_url": "https://discord.com/api/webhooks/1466493725793583218/4vu115wgbEFIXC-Llqhj-rcHiNNdWB2OPbttXPRt6LN-IjibiinC_iHlu61AIqdYbFLW",
-    "owner_id": 774679828594163802,
+    "error_webhook_url": "ERROR_WEBHOOK_URL_HERE",
+    "permission_warning_webhook_url": "PERMISSION_WARNING_WEBHOOK_URL_HERE",
+    "owner_id": OWNER_ID_HERE,
     "timezone": "Europe/Berlin"
 }
