@@ -482,7 +482,7 @@ class EventsCog(commands.Cog):
 
         # Heartbeat processing
         if "heartbeat_source_channel_id" in guild_config and guild_config["heartbeat_source_channel_id"] == message.channel.id:
-            if message.content.startswith("Heartbeat"):
+            if message.content.startswith("Bot"):
                 content = message.content
                 online_match = re.search(r"Online: (.*)", content)
                 offline_match = re.search(r"Offline: (.*)", content)

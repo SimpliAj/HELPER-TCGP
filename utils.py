@@ -956,7 +956,7 @@ def create_heartbeat_embed(guild_config):
     return embed
 
 
-def create_lifetime_stats_embed():
+def create_lifetime_stats_embed(active_guild_ids=None):
     """Create embed with lifetime stats aggregated from ALL guild config files."""
     if DEBUG_LIFETIME_STATS:
         print(f"🔄 Creating lifetime stats embed...")
@@ -970,6 +970,7 @@ def create_lifetime_stats_embed():
 
     guild_count = 0
     active_guild_count = 0
+    inactive_guild_count = 0
 
     known_packs = {}
     for series_name, packs_in_series in config.get("series", {}).items():
@@ -985,6 +986,8 @@ def create_lifetime_stats_embed():
                     guild_id = int(guild_id_str)
                     guild_config = load_guild_config(guild_id)
                     guild_count += 1
+                    if active_guild_ids is not None and guild_id not in active_guild_ids:
+                        inactive_guild_count += 1
                     stats = guild_config.get("stats", {})
                     filter_stats_guild = guild_config.get("filter_stats", {})
                     if stats or filter_stats_guild:
@@ -1019,6 +1022,7 @@ def create_lifetime_stats_embed():
         name="📊 Overall",
         value=f"Total Servers Configured: **{guild_count}**\n"
               f"Servers with Activity: **{active_guild_count}**\n"
+              f"Inactive Servers (bot left/kicked): **{inactive_guild_count}**\n"
               f"Total Found: **{sum(total_filter_stats.values())}**",
         inline=False
     )
@@ -1159,7 +1163,8 @@ async def update_lifetime_stats_message():
         if DEBUG_LIFETIME_STATS:
             print(f"📊 Lifetime Stats: Found {len(LIFETIME_STATS_MESSAGES)} message(s) to update")
 
-        embed = await asyncio.to_thread(create_lifetime_stats_embed)
+        active_guild_ids = {g.id for g in _bot.guilds} if _bot else None
+        embed = await asyncio.to_thread(create_lifetime_stats_embed, active_guild_ids)
         messages_to_remove = []
 
         for message_key, message_info in list(LIFETIME_STATS_MESSAGES.items()):
