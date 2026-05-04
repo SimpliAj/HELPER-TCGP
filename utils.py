@@ -1228,8 +1228,8 @@ async def notify_admin_of_missing_configs(guild_id, missing_packs, missing_filte
         )
         embed.add_field(
             name="How to Fix",
-            value="**Packs:** Use `/addpack` to add the missing pack and set a notification channel\n"
-                  "**Filters:** Use `/addfilter` to configure keyword filters\n"
+            value="**Packs:** Use `/createpackcategory <pack_name>` to set up a channel for the pack\n"
+                  "**Filters:** Use `/setfilter <keyword>` to configure a filter channel\n"
                   "Or re-run `/setup` to auto-configure everything.",
             inline=False
         )
