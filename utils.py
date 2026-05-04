@@ -140,8 +140,12 @@ def save_config(cfg):
                             pass
                 for key in keys_to_remove:
                     del config_copy[key]
-                with open(CONFIG_FILE, "w") as f:
+                tmp_path = CONFIG_FILE + ".tmp"
+                with open(tmp_path, "w") as f:
                     json.dump(config_copy, f, indent=4)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, CONFIG_FILE)
             except Exception as e:
                 print(f"Error saving config: {e}")
 
@@ -193,8 +197,12 @@ def load_guild_config(guild_id):
 
             if restored_config:
                 try:
-                    with open(config_path, "w") as f:
+                    tmp_path = config_path + ".tmp"
+                    with open(tmp_path, "w") as f:
                         json.dump(restored_config, f, indent=4)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp_path, config_path)
                     # asyncio.create_task(log_guild_corruption_to_webhook(...))  # Can't use in thread context
                     print(f"[CORRUPTION] Guild {guild_id}: Config corrupted. Auto-recovered from backup file. Restored from {os.path.basename(restored_from)}")
                     return restored_config
@@ -247,14 +255,22 @@ def save_guild_config(guild_id, guild_config):
                                 os.rename(backup_path, f"{config_path}.backup.1")
                             except Exception:
                                 pass
-                        with open(backup_path, "w") as f:
+                        tmp_backup = backup_path + ".tmp"
+                        with open(tmp_backup, "w") as f:
                             json.dump(current_data, f, indent=4)
+                            f.flush()
+                            os.fsync(f.fileno())
+                        os.replace(tmp_backup, backup_path)
                     except Exception as backup_error:
                         print(f"⚠️ Could not create backup rotation for {guild_id}: {backup_error}")
 
                 config_copy = copy.deepcopy(guild_config)
-                with open(config_path, "w") as f:
+                tmp_path = config_path + ".tmp"
+                with open(tmp_path, "w") as f:
                     json.dump(config_copy, f, indent=4)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, config_path)
             except Exception as e:
                 print(f"Error saving guild config for {guild_id}: {e}")
 
@@ -269,8 +285,12 @@ def save_guild_config_sync(guild_id, guild_config):
         config_path = get_guild_config_path(guild_id)
         try:
             config_copy = copy.deepcopy(guild_config)
-            with open(config_path, "w") as f:
+            tmp_path = config_path + ".tmp"
+            with open(tmp_path, "w") as f:
                 json.dump(config_copy, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, config_path)
         except Exception as e:
             print(f"Error saving guild config for {guild_id}: {e}")
 
