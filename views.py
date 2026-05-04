@@ -10,9 +10,12 @@ class GodPackValidationView(discord.ui.View):
         self.original_message = original_message
         self.disabled = False
         self.guild_id = guild_id
-        self.allowed_role_id = utils.load_guild_config(guild_id).get("validator_role_id") if guild_id else None
+        self.allowed_role_id = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.allowed_role_id is None and self.guild_id:
+            guild_config = await asyncio.to_thread(utils.load_guild_config, self.guild_id)
+            self.allowed_role_id = guild_config.get("validator_role_id")
         member = interaction.user
         if not hasattr(member, "roles"):
             await interaction.followup.send("⛔ Error during role check.", ephemeral=True)
@@ -36,10 +39,11 @@ class GodPackValidationView(discord.ui.View):
 
     @discord.ui.button(label="✅ Valid", style=discord.ButtonStyle.success, custom_id="godpack_valid")
     async def valid_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         self.embed.color = discord.Color.green()
         await self.disable_all_buttons(interaction)
         await interaction.followup.send("✅ Marked as valid.", ephemeral=True)
-        guild_config = utils.load_guild_config(self.guild_id)
+        guild_config = await asyncio.to_thread(utils.load_guild_config, self.guild_id)
         if 'stats' not in guild_config:
             guild_config['stats'] = {'godpacks': {'total': 0, 'valid': 0, 'invalid': 0}, 'general': {'total': 0, 'valid': 0, 'invalid': 0}}
         guild_config['stats']['godpacks']['valid'] += 1
@@ -51,10 +55,11 @@ class GodPackValidationView(discord.ui.View):
 
     @discord.ui.button(label="❌ Invalid", style=discord.ButtonStyle.danger, custom_id="godpack_invalid")
     async def invalid_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         self.embed.color = discord.Color.red()
         await self.disable_all_buttons(interaction)
         await interaction.followup.send("❌ Marked as invalid.", ephemeral=True)
-        guild_config = utils.load_guild_config(self.guild_id)
+        guild_config = await asyncio.to_thread(utils.load_guild_config, self.guild_id)
         if 'stats' not in guild_config:
             guild_config['stats'] = {'godpacks': {'total': 0, 'valid': 0, 'invalid': 0}, 'general': {'total': 0, 'valid': 0, 'invalid': 0}}
         guild_config['stats']['godpacks']['invalid'] += 1
@@ -90,7 +95,7 @@ class TradedModal(discord.ui.Modal, title="Mark as Traded - Enter Card Details")
             child.disabled = True
         await self.original_message.edit(embed=embed, view=self.view)
 
-        guild_config = utils.load_guild_config(self.guild_id)
+        guild_config = await asyncio.to_thread(utils.load_guild_config, self.guild_id)
         if 'stats' not in guild_config:
             guild_config['stats'] = {'godpacks': {'total': 0, 'valid': 0, 'invalid': 0}, 'general': {'total': 0, 'valid': 0, 'invalid': 0}}
         guild_config['stats']['general']['valid'] += 1
@@ -115,9 +120,12 @@ class TradedView(discord.ui.View):
         self.original_message = original_message
         self.disabled = False
         self.guild_id = guild_id
-        self.allowed_role_id = utils.load_guild_config(guild_id).get("validator_role_id") if guild_id else None
+        self.allowed_role_id = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.allowed_role_id is None and self.guild_id:
+            guild_config = await asyncio.to_thread(utils.load_guild_config, self.guild_id)
+            self.allowed_role_id = guild_config.get("validator_role_id")
         member = interaction.user
         if not hasattr(member, "roles"):
             await interaction.followup.send("⛔ Error during role check.", ephemeral=True)

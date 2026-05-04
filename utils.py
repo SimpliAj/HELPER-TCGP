@@ -43,6 +43,7 @@ PACKS = []
 
 # Missing configs tracking
 missing_configs = {}
+PENDING_STATS_GUILDS = set()  # guilds queued for next 15-min stats flush
 
 # Lifetime stats tracking
 LIFETIME_STATS_MESSAGES = {}
@@ -194,11 +195,8 @@ def load_guild_config(guild_id):
                 try:
                     with open(config_path, "w") as f:
                         json.dump(restored_config, f, indent=4)
-                    asyncio.create_task(log_guild_corruption_to_webhook(
-                        guild_id,
-                        f"Config corrupted. Auto-recovered from backup file.",
-                        f"Restored from {os.path.basename(restored_from)}"
-                    ))
+                    # asyncio.create_task(log_guild_corruption_to_webhook(...))  # Can't use in thread context
+                    print(f"[CORRUPTION] Guild {guild_id}: Config corrupted. Auto-recovered from backup file. Restored from {os.path.basename(restored_from)}")
                     return restored_config
                 except Exception as write_error:
                     print(f"❌ Could not write restored config: {write_error}")
@@ -208,18 +206,12 @@ def load_guild_config(guild_id):
             try:
                 os.rename(config_path, corrupted_name)
                 print(f"📦 Saved corrupted config to: {corrupted_name}")
-                asyncio.create_task(log_guild_corruption_to_webhook(
-                    guild_id,
-                    f"❌ CRITICAL: Config AND all backup files are corrupted!\nConfig file renamed to:\n`{os.path.basename(corrupted_name)}`\nCreating empty config as fallback.",
-                    "Fallback to empty config - ALL BACKUPS CORRUPTED"
-                ))
+                # asyncio.create_task(log_guild_corruption_to_webhook(...))  # Can't use in thread context
+                print(f"[CORRUPTION] Guild {guild_id}: CRITICAL - Config AND all backup files are corrupted! Config file renamed to: {os.path.basename(corrupted_name)}. Creating empty config as fallback.")
             except Exception as rename_error:
                 print(f"⚠️ Could not rename corrupted file: {rename_error}")
-                asyncio.create_task(log_guild_corruption_to_webhook(
-                    guild_id,
-                    f"❌ CRITICAL: Config corrupted AND all backups failed!\nCould not rename corrupted file: {str(rename_error)[:500]}",
-                    "Using empty config fallback - CRITICAL ERROR"
-                ))
+                # asyncio.create_task(log_guild_corruption_to_webhook(...))  # Can't use in thread context
+                print(f"[CORRUPTION] Guild {guild_id}: CRITICAL - Config corrupted AND all backups failed! Could not rename corrupted file: {str(rename_error)[:500]}. Using empty config fallback.")
 
             return empty_config
 
@@ -1077,85 +1069,70 @@ def create_lifetime_stats_embed(active_guild_ids=None):
 # UPDATE MESSAGE FUNCTIONS
 # ============================================================
 
+async def _edit_or_replace(channel, message_id, embed, guild_config, guild_id, id_key, msg_key):
+    """Edit a message; if Discord blocks edits on old messages (30046), send a new one and update config."""
+    try:
+        message = await channel.fetch_message(message_id)
+        await message.edit(embed=embed)
+    except discord.NotFound:
+        guild_config.pop(id_key, None)
+        guild_config.pop(msg_key, None)
+        save_guild_config(guild_id, guild_config)
+    except discord.HTTPException as e:
+        if e.code == 30046:
+            new_msg = await channel.send(embed=embed)
+            guild_config[msg_key] = new_msg.id
+            save_guild_config(guild_id, guild_config)
+            print(f"Replaced old stats message in {channel.id} (30046 limit hit)")
+        else:
+            print(f"Error updating message: {e}")
+    except Exception as e:
+        print(f"Error updating message: {e}")
+
+
 async def update_stats_message(guild_id):
-    guild_config = load_guild_config(guild_id)
-    stats_channel_id = guild_config.get("stats_channel_id")
-    stats_message_id = guild_config.get("stats_message_id")
-    if stats_channel_id and stats_message_id and _bot:
-        channel = _bot.get_channel(stats_channel_id)
+    guild_config = await asyncio.to_thread(load_guild_config, guild_id)
+    channel_id = guild_config.get("stats_channel_id")
+    message_id = guild_config.get("stats_message_id")
+    if channel_id and message_id and _bot:
+        channel = _bot.get_channel(channel_id)
         if channel:
-            try:
-                message = await channel.fetch_message(stats_message_id)
-                embed = create_stats_embed(guild_config)
-                await message.edit(embed=embed)
-            except discord.NotFound:
-                guild_config.pop("stats_channel_id", None)
-                guild_config.pop("stats_message_id", None)
-                save_guild_config(guild_id, guild_config)
-            except Exception as e:
-                print(f"Error updating stats message: {e}")
+            await _edit_or_replace(channel, message_id, create_stats_embed(guild_config), guild_config, guild_id, "stats_channel_id", "stats_message_id")
 
 
 async def update_detailed_stats_message(guild_id):
-    guild_config = load_guild_config(guild_id)
-    detailed_stats_channel_id = guild_config.get("detailed_stats_channel_id")
-    detailed_stats_message_id = guild_config.get("detailed_stats_message_id")
-    if detailed_stats_channel_id and detailed_stats_message_id and _bot:
-        channel = _bot.get_channel(detailed_stats_channel_id)
+    guild_config = await asyncio.to_thread(load_guild_config, guild_id)
+    channel_id = guild_config.get("detailed_stats_channel_id")
+    message_id = guild_config.get("detailed_stats_message_id")
+    if channel_id and message_id and _bot:
+        channel = _bot.get_channel(channel_id)
         if channel:
-            try:
-                message = await channel.fetch_message(detailed_stats_message_id)
-                embed = create_detailed_stats_embed(guild_config)
-                await message.edit(embed=embed)
-            except discord.NotFound:
-                guild_config.pop("detailed_stats_channel_id", None)
-                guild_config.pop("detailed_stats_message_id", None)
-                save_guild_config(guild_id, guild_config)
-            except Exception as e:
-                print(f"Error updating detailed stats message: {e}")
+            await _edit_or_replace(channel, message_id, create_detailed_stats_embed(guild_config), guild_config, guild_id, "detailed_stats_channel_id", "detailed_stats_message_id")
 
 
 async def update_pack_stats_message(guild_id):
-    guild_config = load_guild_config(guild_id)
-    pack_stats_channel_id = guild_config.get("pack_stats_channel_id")
-    pack_stats_message_id = guild_config.get("pack_stats_message_id")
-    if pack_stats_channel_id and pack_stats_message_id and _bot:
-        channel = _bot.get_channel(pack_stats_channel_id)
+    guild_config = await asyncio.to_thread(load_guild_config, guild_id)
+    channel_id = guild_config.get("pack_stats_channel_id")
+    message_id = guild_config.get("pack_stats_message_id")
+    if channel_id and message_id and _bot:
+        channel = _bot.get_channel(channel_id)
         if channel:
-            try:
-                message = await channel.fetch_message(pack_stats_message_id)
-                embed = create_pack_stats_embed(guild_config)
-                await message.edit(embed=embed)
-            except discord.NotFound:
-                guild_config.pop("pack_stats_channel_id", None)
-                guild_config.pop("pack_stats_message_id", None)
-                save_guild_config(guild_id, guild_config)
-            except Exception as e:
-                print(f"Error updating pack stats message: {e}")
+            await _edit_or_replace(channel, message_id, create_pack_stats_embed(guild_config), guild_config, guild_id, "pack_stats_channel_id", "pack_stats_message_id")
 
 
 async def update_heartbeat_message(guild_id):
-    guild_config = load_guild_config(guild_id)
-    heartbeat_channel_id = guild_config.get("heartbeat_target_channel_id")
-    heartbeat_message_id = guild_config.get("heartbeat_message_id")
-    if heartbeat_channel_id and heartbeat_message_id and _bot:
-        channel = _bot.get_channel(heartbeat_channel_id)
+    guild_config = await asyncio.to_thread(load_guild_config, guild_id)
+    channel_id = guild_config.get("heartbeat_target_channel_id")
+    message_id = guild_config.get("heartbeat_message_id")
+    if channel_id and message_id and _bot:
+        channel = _bot.get_channel(channel_id)
         if channel:
-            try:
-                message = await channel.fetch_message(heartbeat_message_id)
-                embed = create_heartbeat_embed(guild_config)
-                await message.edit(embed=embed)
-            except discord.NotFound:
-                guild_config.pop("heartbeat_target_channel_id", None)
-                guild_config.pop("heartbeat_message_id", None)
-                save_guild_config(guild_id, guild_config)
-            except Exception as e:
-                print(f"Error updating heartbeat message: {e}")
+            await _edit_or_replace(channel, message_id, create_heartbeat_embed(guild_config), guild_config, guild_id, "heartbeat_target_channel_id", "heartbeat_message_id")
 
 
 async def update_lifetime_stats_message():
     try:
-        load_lifetime_stats_messages()
+        await asyncio.to_thread(load_lifetime_stats_messages)
         if not LIFETIME_STATS_MESSAGES:
             if DEBUG_LIFETIME_STATS:
                 print(f"ℹ️ Lifetime Stats: No messages to update")
@@ -1201,10 +1178,11 @@ async def update_lifetime_stats_message():
         if messages_to_remove:
             for key in messages_to_remove:
                 del LIFETIME_STATS_MESSAGES[key]
-            save_lifetime_stats_messages()
+            await asyncio.to_thread(save_lifetime_stats_messages)
     except Exception as e:
-        if DEBUG_LIFETIME_STATS:
-            print(f"❌ Error in update_lifetime_stats_message: {e}")
+        import traceback
+        print(f"❌ Error in update_lifetime_stats_message: {e}")
+        traceback.print_exc()
 
 
 # ============================================================
@@ -1250,12 +1228,12 @@ async def notify_admin_of_missing_configs(guild_id, missing_packs, missing_filte
         )
         embed.add_field(
             name="How to Fix",
-            value="**Packs:** Use `/setpackfilter [pack_name]` to configure\n"
-                  "**Filters:** Use `/setfilter [keyword]` to configure\n"
+            value="**Packs:** Use `/addpack` to add the missing pack and set a notification channel\n"
+                  "**Filters:** Use `/addfilter` to configure keyword filters\n"
                   "Or re-run `/setup` to auto-configure everything.",
             inline=False
         )
-        embed.set_footer(text="These configs are needed to route messages correctly.")
+        embed.set_footer(text="These configs are needed to route notifications correctly.")
         await owner.send(embed=embed)
         print(f"Sent missing config notification to {owner} ({guild.name})")
     except discord.Forbidden:

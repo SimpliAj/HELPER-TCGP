@@ -115,6 +115,7 @@ class EventsCog(commands.Cog):
                 utils.LIFETIME_STATS_TASK_STARTED = False
 
         asyncio.create_task(self._auto_cleanup_task())
+        asyncio.create_task(self._stats_batch_update_task())
 
         print("🧹 Bereinige bot_config.json...")
         utils.clean_stale_guilds()
@@ -205,8 +206,10 @@ class EventsCog(commands.Cog):
                 if not os.path.exists(utils.CONFIG_FILE):
                     continue
                 try:
-                    with open(utils.CONFIG_FILE, "r") as f:
-                        current_config = json.load(f)
+                    def _read_bot_config():
+                        with open(utils.CONFIG_FILE, "r") as f:
+                            return json.load(f)
+                    current_config = await asyncio.to_thread(_read_bot_config)
                 except (json.JSONDecodeError, Exception):
                     continue
                 guild_ids_found = []
@@ -224,7 +227,7 @@ class EventsCog(commands.Cog):
                         try:
                             gc = current_config[guild_id_str]
                             if isinstance(gc, dict):
-                                utils.save_guild_config_sync(guild_id_str, gc)
+                                await asyncio.to_thread(utils.save_guild_config_sync, guild_id_str, gc)
                             del current_config[guild_id_str]
                         except Exception as e:
                             print(f"  ❌ [AUTO-CLEANUP] Error extracting guild {guild_id_str}: {e}")
@@ -236,7 +239,7 @@ class EventsCog(commands.Cog):
     async def _lifetime_stats_update_task(self):
         try:
             await asyncio.sleep(2)
-            print("✅ Lifetime Stats Update Task started - updating every 60 seconds\n")
+            print("✅ Lifetime Stats Update Task started - updating every 15 minutes\n")
             utils.load_lifetime_stats_messages()
             cycle_count = 0
             while not self.bot.is_closed():
@@ -245,14 +248,37 @@ class EventsCog(commands.Cog):
                     if utils.DEBUG_LIFETIME_STATS:
                         print(f"[Lifetime Stats #{cycle_count}] Update at {datetime.now(utils.BERLIN_TZ).strftime('%H:%M:%S')} - Tracked: {len(utils.LIFETIME_STATS_MESSAGES)} message(s)")
                     await utils.update_lifetime_stats_message()
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(900)
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
                     print(f"❌ Error in lifetime_stats_update_task cycle: {e}")
-                    await asyncio.sleep(10)
+                    await asyncio.sleep(30)
         except Exception as e:
             print(f"❌ Critical error in lifetime_stats_update_task: {e}")
+
+    async def _stats_batch_update_task(self):
+        await self.bot.wait_until_ready()
+        await asyncio.sleep(15)
+        print("✅ Stats batch update task started - flushing every 15 minutes\n")
+        while not self.bot.is_closed():
+            try:
+                await asyncio.sleep(900)
+                pending = list(utils.PENDING_STATS_GUILDS)
+                utils.PENDING_STATS_GUILDS.clear()
+                for guild_id in pending:
+                    try:
+                        await utils.update_stats_message(guild_id)
+                        await utils.update_detailed_stats_message(guild_id)
+                        await utils.update_pack_stats_message(guild_id)
+                    except Exception as e:
+                        print(f"Error updating stats for guild {guild_id}: {e}")
+                if pending:
+                    print(f"✅ Stats flushed for {len(pending)} guild(s)")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"❌ Error in stats batch update task: {e}")
 
     async def _heartbeat_monitor(self):
         while True:
@@ -262,7 +288,7 @@ class EventsCog(commands.Cog):
                     if not config_file.startswith("guild_") or not config_file.endswith(".json"):
                         continue
                     guild_id = config_file.replace("guild_", "").replace(".json", "")
-                    guild_config = utils.load_guild_config(guild_id)
+                    guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id)
                     if "heartbeat_data" in guild_config and "last_update" in guild_config["heartbeat_data"]:
                         try:
                             last_update = datetime.fromisoformat(guild_config["heartbeat_data"]["last_update"])
@@ -302,7 +328,7 @@ class EventsCog(commands.Cog):
             return
 
         guild_id = str(message.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
+        guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id)
         keyword_channel_map = guild_config.get("keyword_channel_map", {})
         pack_channel_map = guild_config.get("pack_channel_map", {})
         validation_buttons_enabled = guild_config.get("validation_buttons_enabled", False)
@@ -402,8 +428,7 @@ class EventsCog(commands.Cog):
                 guild_config['filter_stats'][keyword] = guild_config['filter_stats'].get(keyword, 0) + 1
 
             utils.save_guild_config(guild_id, guild_config)
-            await utils.update_stats_message(guild_id)
-            await utils.update_detailed_stats_message(guild_id)
+            utils.PENDING_STATS_GUILDS.add(guild_id)
 
             try:
                 sent_message = await target_channel.send(embed=embed, view=view)
@@ -472,7 +497,7 @@ class EventsCog(commands.Cog):
                     guild_config['filter_stats'] = {}
                 guild_config['filter_stats'][pack] = guild_config['filter_stats'].get(pack, 0) + 1
                 utils.save_guild_config(guild_id, guild_config)
-                await utils.update_pack_stats_message(guild_id)
+                utils.PENDING_STATS_GUILDS.add(guild_id)
 
                 try:
                     await target_channel.send(embed=embed)
