@@ -116,6 +116,7 @@ class EventsCog(commands.Cog):
 
         asyncio.create_task(self._auto_cleanup_task())
         asyncio.create_task(self._stats_batch_update_task())
+        asyncio.create_task(self._prune_stale_data_task())
 
         print("🧹 Bereinige bot_config.json...")
         utils.clean_stale_guilds()
@@ -235,6 +236,58 @@ class EventsCog(commands.Cog):
                     print(f"\n✅ [AUTO-CLEANUP] bot_config.json cleaned\n")
             except Exception as e:
                 print(f"Error in auto_cleanup_task: {e}")
+
+    async def _prune_stale_data_task(self):
+        await self.bot.wait_until_ready()
+        DISCORD_EPOCH = 1420070400000
+        MAX_AGE_DAYS = 7
+
+        def _snowflake_age_days(snowflake_str):
+            try:
+                ts_ms = (int(snowflake_str) >> 22) + DISCORD_EPOCH
+                age = (time.time() * 1000 - ts_ms) / (1000 * 86400)
+                return age
+            except Exception:
+                return 0
+
+        def _prune_all():
+            import os
+            config_dir = utils.GUILD_CONFIG_DIR
+            pruned_guilds = 0
+            for fname in os.listdir(config_dir):
+                if not fname.startswith("guild_") or not fname.endswith(".json"):
+                    continue
+                guild_id = fname[6:-5]
+                try:
+                    gc = utils.load_guild_config(guild_id)
+                    changed = False
+
+                    if "trade_messages" in gc:
+                        del gc["trade_messages"]
+                        changed = True
+
+                    vm = gc.get("validation_messages", {})
+                    stale = [k for k, v in vm.items() if _snowflake_age_days(k) > MAX_AGE_DAYS]
+                    if stale:
+                        for k in stale:
+                            del vm[k]
+                        changed = True
+
+                    if changed:
+                        utils.save_guild_config_sync(guild_id, gc)
+                        pruned_guilds += 1
+                except Exception:
+                    pass
+            return pruned_guilds
+
+        while not self.bot.is_closed():
+            await asyncio.sleep(86400)
+            try:
+                pruned = await asyncio.to_thread(_prune_all)
+                if pruned:
+                    print(f"✅ [PRUNE] Cleaned stale data in {pruned} guild config(s)")
+            except Exception as e:
+                print(f"Error in prune_stale_data_task: {e}")
 
     async def _lifetime_stats_update_task(self):
         try:
