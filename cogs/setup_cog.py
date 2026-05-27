@@ -594,68 +594,6 @@ class SetupCog(commands.Cog):
         view = SetupView(interaction.user)
         await interaction.followup.send(embed=embed, view=view)
 
-    @app_commands.command(name="resetsources", description="Set or reset source channels (Admin only)")
-    async def resetsources(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        member = interaction.guild.get_member(interaction.user.id)
-        if member is None or not member.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        has_sources = "default_source_channel_ids" in guild_config and guild_config["default_source_channel_ids"]
-
-        class SourceOptionsView(discord.ui.View):
-            def __init__(self_inner):
-                super().__init__(timeout=300)
-
-            @discord.ui.button(label="Set New Sources", style=discord.ButtonStyle.primary)
-            async def set_sources(self_inner, inter: discord.Interaction, button: discord.ui.Button):
-                modal = SourceModal()
-                modal.guild_id = guild_id
-                modal.original_user = inter.user
-                await inter.response.send_modal(modal)
-
-            @discord.ui.button(label="Reset to All Channels", style=discord.ButtonStyle.danger)
-            async def reset_sources(self_inner, inter: discord.Interaction, button: discord.ui.Button):
-                await inter.response.defer(ephemeral=True)
-                gc = utils.load_guild_config(guild_id)
-                old_sources = gc.get("default_source_channel_ids", [])
-                gc["default_source_channel_ids"] = []
-                if "keyword_channel_map" in gc:
-                    for kw, cfg in gc["keyword_channel_map"].items():
-                        cfg["source_channel_ids"] = []
-                if "pack_channel_map" in gc:
-                    for pack, cfg in gc["pack_channel_map"].items():
-                        cfg["source_channel_ids"] = []
-                utils.save_guild_config(guild_id, gc)
-                sources_mention = ', '.join([f'<#{sid}>' for sid in old_sources]) if old_sources else "None"
-                embed = discord.Embed(
-                    title="✅ Sources Reset",
-                    description=f"Source channels have been reset.\n\n**Previous Sources:** {sources_mention}\n**New Sources:** All channels",
-                    color=discord.Color.green()
-                )
-                await inter.followup.send(embed=embed, ephemeral=True)
-
-        if has_sources:
-            current_sources = guild_config.get("default_source_channel_ids", [])
-            sources_mention = ', '.join([f'<#{sid}>' for sid in current_sources])
-            embed = discord.Embed(
-                title="📡 Manage Source Channels",
-                description=f"**Current Sources:** {sources_mention}\n\nWhat do you want to do?",
-                color=discord.Color.blue()
-            )
-        else:
-            embed = discord.Embed(
-                title="📡 Manage Source Channels",
-                description="No source channels currently set (monitoring all channels).\n\nWhat do you want to do?",
-                color=discord.Color.blue()
-            )
-
-        view = SourceOptionsView()
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
