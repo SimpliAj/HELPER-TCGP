@@ -302,6 +302,39 @@ class ConfigCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    def _build_config_embed(self, guild: discord.Guild, gc: dict) -> discord.Embed:
+        embed = discord.Embed(title="⚙️ Server Configuration", description="Select what you want to configure:", color=discord.Color.blurple())
+
+        pack_mode = gc.get("pack_channel_mode")
+        embed.add_field(name="📦 Pack Mode", value=("One per series" if pack_mode == "series" else "One per pack") if pack_mode else "*not set*", inline=True)
+
+        status = gc.get("validation_buttons_enabled")
+        embed.add_field(name="🔘 Traded Buttons", value=("Enabled" if status else "Disabled") if status is not None else "*not set*", inline=True)
+
+        src_id = gc.get("heartbeat_source_channel_id")
+        tgt_id = gc.get("heartbeat_target_channel_id")
+        if src_id and tgt_id:
+            embed.add_field(name="💓 Heartbeat", value=f"<#{src_id}> → <#{tgt_id}>", inline=False)
+        else:
+            embed.add_field(name="💓 Heartbeat", value="*not set*", inline=False)
+
+        val_role_id = gc.get("validator_role_id")
+        embed.add_field(name="🛡️ Validator Role", value=f"<@&{val_role_id}>" if val_role_id else "*not set*", inline=True)
+
+        ping_parts = []
+        if gc.get("godpack_ping"):
+            ping_parts.append(f"God Pack: <@&{gc['godpack_ping']}>")
+        if gc.get("invgodpack_ping"):
+            ping_parts.append(f"Invalid GP: <@&{gc['invgodpack_ping']}>")
+        if gc.get("safe_trade_ping"):
+            ping_parts.append(f"Safe Trade: <@&{gc['safe_trade_ping']}>")
+        embed.add_field(name="🔔 Ping Roles", value="\n".join(ping_parts) if ping_parts else "*not set*", inline=True)
+
+        sources = gc.get("default_source_channel_ids", [])
+        embed.add_field(name="📡 Sources", value=", ".join([f"<#{sid}>" for sid in sources]) if sources else "All channels", inline=False)
+
+        return embed
+
     @app_commands.command(name="set", description="Server configuration (Admin only)")
     async def set_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -312,7 +345,8 @@ class ConfigCog(commands.Cog):
             )
             return
         guild_id = str(interaction.guild.id)
-        embed = discord.Embed(title="⚙️ Server Configuration", description="Select what you want to configure:", color=discord.Color.blurple())
+        gc = utils.load_guild_config(guild_id)
+        embed = self._build_config_embed(interaction.guild, gc)
         await interaction.followup.send(embed=embed, view=SetSelectView(guild_id), ephemeral=True)
 
     @app_commands.command(name="clearfilters", description="Clear all filters of a selected type")
