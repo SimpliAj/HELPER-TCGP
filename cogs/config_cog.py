@@ -5,6 +5,73 @@ import re
 import utils
 
 
+# ── Modals ────────────────────────────────────────────────────────────────────
+
+class HeartbeatModal(discord.ui.Modal, title="Set Heartbeat Channels"):
+    source = discord.ui.TextInput(label="Source Channel", placeholder="#channel or channel ID", min_length=2, max_length=100)
+    target = discord.ui.TextInput(label="Target Channel", placeholder="#channel or channel ID", min_length=2, max_length=100)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        def resolve_channel(value: str):
+            value = value.strip()
+            match = re.search(r'(\d{17,20})', value)
+            if match:
+                return interaction.guild.get_channel(int(match.group(1)))
+            name = value.lstrip('#').lower()
+            return discord.utils.get(interaction.guild.text_channels, name=name)
+
+        source_ch = resolve_channel(self.source.value)
+        target_ch = resolve_channel(self.target.value)
+
+        if not source_ch or not target_ch:
+            await interaction.followup.send("❌ Could not find one or both channels. Use #mention or channel ID.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+        guild_config = utils.load_guild_config(guild_id)
+        guild_config["heartbeat_source_channel_id"] = source_ch.id
+        guild_config["heartbeat_target_channel_id"] = target_ch.id
+        embed = utils.create_heartbeat_embed(guild_config)
+        sent_message = await target_ch.send(embed=embed)
+        guild_config["heartbeat_message_id"] = sent_message.id
+        utils.save_guild_config(guild_id, guild_config)
+
+        await interaction.followup.send(
+            embed=discord.Embed(title="✅ Heartbeat Configured",
+                                description=f"Source: {source_ch.mention} → Stats in {target_ch.mention}.",
+                                color=discord.Color.green()),
+            ephemeral=True
+        )
+
+
+class ValidatorRoleModal(discord.ui.Modal, title="Set Validator Role"):
+    role_input = discord.ui.TextInput(label="Role", placeholder="@RoleName or role ID", min_length=1, max_length=100)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        value = self.role_input.value.strip()
+        match = re.search(r'(\d{17,20})', value)
+        role = None
+        if match:
+            role = interaction.guild.get_role(int(match.group(1)))
+        if not role:
+            name = value.lstrip('@').lower()
+            role = discord.utils.get(interaction.guild.roles, name=name)
+        if not role:
+            await interaction.followup.send("❌ Role not found. Use @mention or role ID.", ephemeral=True)
+            return
+        guild_id = str(interaction.guild.id)
+        guild_config = utils.load_guild_config(guild_id)
+        guild_config["validator_role_id"] = role.id
+        utils.save_guild_config(guild_id, guild_config)
+        await interaction.followup.send(
+            embed=discord.Embed(title="✅ Validator Role Set", description=f"Set to {role.mention}.", color=discord.Color.green()),
+            ephemeral=True
+        )
+
+
 class SourceModal(discord.ui.Modal, title="Set Source Channels"):
     source_input = discord.ui.TextInput(
         label="Source Channels",
@@ -38,7 +105,6 @@ class SourceModal(discord.ui.Modal, title="Set Source Channels"):
                         if ch.name.lower() == name:
                             source_ids.append(ch.id)
                             break
-
         guild_config = utils.load_guild_config(self.guild_id)
         guild_config["default_source_channel_ids"] = source_ids
         if "keyword_channel_map" in guild_config:
@@ -48,201 +114,206 @@ class SourceModal(discord.ui.Modal, title="Set Source Channels"):
             for cfg in guild_config["pack_channel_map"].values():
                 cfg["source_channel_ids"] = source_ids[:]
         utils.save_guild_config(self.guild_id, guild_config)
-
         sources_mention = ', '.join([f'<#{sid}>' for sid in source_ids]) if source_ids else "All channels"
-        embed = discord.Embed(
-            title="✅ Sources Updated",
-            description=f"Source channels set to: {sources_mention}",
-            color=discord.Color.green()
+        await interaction.followup.send(
+            embed=discord.Embed(title="✅ Sources Updated", description=f"Source channels: {sources_mention}", color=discord.Color.green()),
+            ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
 
+
+# ── /set flow ─────────────────────────────────────────────────────────────────
+
+class SetSelectView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        select = discord.ui.Select(
+            placeholder="What do you want to configure?",
+            options=[
+                discord.SelectOption(label="Pack Mode", value="packmode", description="One channel per series or per pack", emoji="📦"),
+                discord.SelectOption(label="Status", value="status", description="Enable/disable traded buttons", emoji="🔘"),
+                discord.SelectOption(label="Heartbeat", value="heartbeat", description="Set heartbeat source & target channels", emoji="💓"),
+                discord.SelectOption(label="Validator Role", value="validatorrole", description="Role allowed to use validation buttons", emoji="🛡️"),
+                discord.SelectOption(label="Ping Roles", value="pingroles", description="Set ping roles for god pack / safe trade", emoji="🔔"),
+                discord.SelectOption(label="Sources", value="sources", description="Set or reset source channels", emoji="📡"),
+            ]
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        choice = interaction.data["values"][0]
+
+        if choice == "packmode":
+            view = PackModeView(self.guild_id)
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="📦 Pack Mode", description="Choose how pack channels are organized:", color=discord.Color.blue()),
+                view=view
+            )
+
+        elif choice == "status":
+            view = StatusView(self.guild_id)
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="🔘 Traded Buttons Status", description="Enable or disable traded buttons for Safe 4 Trade embeds:", color=discord.Color.blue()),
+                view=view
+            )
+
+        elif choice == "heartbeat":
+            await interaction.response.send_modal(HeartbeatModal())
+
+        elif choice == "validatorrole":
+            await interaction.response.send_modal(ValidatorRoleModal())
+
+        elif choice == "pingroles":
+            roles = sorted(interaction.guild.roles, key=lambda r: r.position, reverse=True)[:25]
+            if interaction.guild.default_role in roles:
+                roles.remove(interaction.guild.default_role)
+            ping_type_select = discord.ui.Select(
+                placeholder="Select Ping Type...",
+                options=[
+                    discord.SelectOption(label="God Pack Ping", value="godpack"),
+                    discord.SelectOption(label="Invalid God Pack Ping", value="invgodpack"),
+                    discord.SelectOption(label="Safe for Trade Ping", value="safe_trade")
+                ]
+            )
+            guild_id = self.guild_id
+
+            async def ping_type_cb(inter: discord.Interaction):
+                ping_type = inter.data["values"][0]
+                role_select = discord.ui.Select(
+                    placeholder=f"Select role for {ping_type.replace('_', ' ').title()}...",
+                    options=[discord.SelectOption(label=r.name, value=str(r.id)) for r in roles]
+                )
+                async def role_cb(i: discord.Interaction):
+                    role_id = int(i.data["values"][0])
+                    gc = utils.load_guild_config(guild_id)
+                    gc[f"{ping_type}_ping"] = role_id
+                    utils.save_guild_config(guild_id, gc)
+                    role = i.guild.get_role(role_id)
+                    await i.response.edit_message(
+                        content=f"✅ {ping_type.replace('_', ' ').title()} set to {role.mention}",
+                        embed=None, view=None
+                    )
+                role_select.callback = role_cb
+                v = discord.ui.View()
+                v.add_item(role_select)
+                await inter.response.edit_message(
+                    embed=discord.Embed(title="🔔 Select Role", description=f"Pick a role for **{ping_type.replace('_', ' ').title()}**:", color=discord.Color.blue()),
+                    view=v
+                )
+
+            ping_type_select.callback = ping_type_cb
+            v = discord.ui.View()
+            v.add_item(ping_type_select)
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="🔔 Ping Roles", description="Select the ping type to configure:", color=discord.Color.blue()),
+                view=v
+            )
+
+        elif choice == "sources":
+            guild_id = self.guild_id
+            gc = utils.load_guild_config(guild_id)
+            current_sources = gc.get("default_source_channel_ids", [])
+            sources_mention = ', '.join([f'<#{sid}>' for sid in current_sources]) if current_sources else "All channels"
+
+            class SourceOptionsView(discord.ui.View):
+                def __init__(self):
+                    super().__init__(timeout=300)
+
+                @discord.ui.button(label="Set New Sources", style=discord.ButtonStyle.primary)
+                async def btn_set(self_inner, inter: discord.Interaction, button: discord.ui.Button):
+                    modal = SourceModal()
+                    modal.guild_id = guild_id
+                    modal.original_user = inter.user
+                    await inter.response.send_modal(modal)
+
+                @discord.ui.button(label="Reset to All Channels", style=discord.ButtonStyle.danger)
+                async def btn_reset(self_inner, inter: discord.Interaction, button: discord.ui.Button):
+                    await inter.response.defer(ephemeral=True)
+                    gc2 = utils.load_guild_config(guild_id)
+                    old = gc2.get("default_source_channel_ids", [])
+                    gc2["default_source_channel_ids"] = []
+                    for cfg in gc2.get("keyword_channel_map", {}).values():
+                        cfg["source_channel_ids"] = []
+                    for cfg in gc2.get("pack_channel_map", {}).values():
+                        cfg["source_channel_ids"] = []
+                    utils.save_guild_config(guild_id, gc2)
+                    old_mention = ', '.join([f'<#{sid}>' for sid in old]) if old else "None"
+                    await inter.followup.send(
+                        embed=discord.Embed(title="✅ Sources Reset", description=f"**Previous:** {old_mention}\n**New:** All channels", color=discord.Color.green()),
+                        ephemeral=True
+                    )
+
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="📡 Manage Source Channels", description=f"**Current:** {sources_mention}", color=discord.Color.blue()),
+                view=SourceOptionsView()
+            )
+
+
+class PackModeView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="One channel per Series", style=discord.ButtonStyle.primary)
+    async def btn_series(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._set(interaction, "series", "one channel per series")
+
+    @discord.ui.button(label="One channel per Pack", style=discord.ButtonStyle.secondary)
+    async def btn_pack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._set(interaction, "pack", "one channel per pack")
+
+    async def _set(self, interaction: discord.Interaction, mode: str, desc: str):
+        gc = utils.load_guild_config(self.guild_id)
+        gc["pack_channel_mode"] = mode
+        utils.save_guild_config(self.guild_id, gc)
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="✅ Pack Mode Updated", description=f"Pack channels set to {desc}.", color=discord.Color.green()),
+            view=None
+        )
+
+
+class StatusView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="Enable", style=discord.ButtonStyle.success)
+    async def btn_enable(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._set(interaction, True)
+
+    @discord.ui.button(label="Disable", style=discord.ButtonStyle.danger)
+    async def btn_disable(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._set(interaction, False)
+
+    async def _set(self, interaction: discord.Interaction, status: bool):
+        gc = utils.load_guild_config(self.guild_id)
+        gc["validation_buttons_enabled"] = status
+        utils.save_guild_config(self.guild_id, gc)
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="✅ Status Updated", description=f"Traded buttons are now {'**enabled**' if status else '**disabled**'}.", color=discord.Color.green()),
+            view=None
+        )
+
+
+# ── Cog ───────────────────────────────────────────────────────────────────────
 
 class ConfigCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # ── /set group ──────────────────────────────────────────────────────────
-    set_group = app_commands.Group(name="set", description="Server configuration commands (Admin only)")
-
-    async def _admin_check(self, interaction: discord.Interaction) -> bool:
+    @app_commands.command(name="set", description="Server configuration (Admin only)")
+    async def set_cmd(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return False
-        return True
-
-    @set_group.command(name="packmode", description="Change the pack channel mode after setup")
-    @app_commands.describe(mode="Pack channel organization mode")
-    @app_commands.choices(mode=[
-        app_commands.Choice(name="One channel per series", value="series"),
-        app_commands.Choice(name="One channel per pack", value="pack")
-    ])
-    async def set_packmode(self, interaction: discord.Interaction, mode: str):
-        await interaction.response.defer(ephemeral=True)
-        if not await self._admin_check(interaction):
+            await interaction.followup.send(
+                embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
         guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config["pack_channel_mode"] = mode
-        utils.save_guild_config(guild_id, guild_config)
-        mode_desc = "one channel per series" if mode == "series" else "one channel per pack"
-        embed = discord.Embed(
-            title="Pack Mode Updated",
-            description=f"Pack channels are now set to {mode_desc}. Use /clearfilters pack to reset and reconfigure channels if needed.",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @set_group.command(name="status", description="Enable or disable traded buttons for Safe 4 Trade embeds")
-    @app_commands.describe(status="True to enable traded buttons; False to disable them")
-    async def set_status(self, interaction: discord.Interaction, status: bool):
-        await interaction.response.defer(ephemeral=True)
-        if not await self._admin_check(interaction):
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config["validation_buttons_enabled"] = status
-        utils.save_guild_config(guild_id, guild_config)
-        embed = discord.Embed(
-            title="Traded Buttons Status Updated",
-            description=f"Traded buttons are now {'**enabled**' if status else '**disabled**'}. God pack embeds always have validation buttons.",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @set_group.command(name="heartbeat", description="Set the source and target channels for heartbeat stats")
-    @app_commands.describe(
-        source_channel="The channel where heartbeat messages are posted",
-        target_channel="The channel to post the updating heartbeat embed"
-    )
-    async def set_heartbeat(self, interaction: discord.Interaction, source_channel: discord.TextChannel, target_channel: discord.TextChannel):
-        await interaction.response.defer(ephemeral=True)
-        if not await self._admin_check(interaction):
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config["heartbeat_source_channel_id"] = source_channel.id
-        guild_config["heartbeat_target_channel_id"] = target_channel.id
-        embed = utils.create_heartbeat_embed(guild_config)
-        sent_message = await target_channel.send(embed=embed)
-        guild_config["heartbeat_message_id"] = sent_message.id
-        utils.save_guild_config(guild_id, guild_config)
-        response_embed = discord.Embed(
-            title="Heartbeat Embed Configured",
-            description=f"Source: {source_channel.mention}. Stats embed will update in {target_channel.mention}.",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=response_embed, ephemeral=True)
-
-    @set_group.command(name="validatorrole", description="Set the validator role for validation buttons")
-    @app_commands.describe(role="The role allowed to use validation buttons")
-    async def set_validatorrole(self, interaction: discord.Interaction, role: discord.Role):
-        await interaction.response.defer(ephemeral=True)
-        if not await self._admin_check(interaction):
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config["validator_role_id"] = role.id
-        utils.save_guild_config(guild_id, guild_config)
-        embed = discord.Embed(title="Validator Role Set", description=f"Validator role set to {role.mention}.", color=discord.Color.green())
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @set_group.command(name="pingroles", description="Set ping roles for god pack, invalid god pack, or safe for trade")
-    async def set_pingroles(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        if not await self._admin_check(interaction):
-            return
-        select = discord.ui.Select(
-            placeholder="Select Ping Type...",
-            options=[
-                discord.SelectOption(label="God Pack Ping", value="godpack"),
-                discord.SelectOption(label="Invalid God Pack Ping", value="invgodpack"),
-                discord.SelectOption(label="Safe for Trade Ping", value="safe_trade")
-            ]
-        )
-        select.callback = lambda inter: self._ping_type_callback(inter)
-        view = discord.ui.View()
-        view.add_item(select)
-        embed = discord.Embed(title="Set Ping Role", description="First, select the ping type.", color=discord.Color.blue())
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-
-    async def _ping_type_callback(self, interaction: discord.Interaction):
-        ping_type = interaction.data['values'][0]
-        guild_id = str(interaction.guild.id)
-        roles = sorted(interaction.guild.roles, key=lambda r: r.position, reverse=True)[:25]
-        if interaction.guild.default_role in roles:
-            roles.remove(interaction.guild.default_role)
-        role_select = discord.ui.Select(
-            placeholder=f"Select Role for {ping_type.replace('_', ' ').title()}...",
-            options=[discord.SelectOption(label=role.name, value=str(role.id)) for role in roles]
-        )
-        role_select.callback = lambda i: self._set_ping(i, ping_type, guild_id)
-        view = discord.ui.View()
-        view.add_item(role_select)
-        await interaction.response.edit_message(content=f"Select role for {ping_type.replace('_', ' ').title()}:", view=view, embed=None)
-
-    async def _set_ping(self, interaction: discord.Interaction, ping_type: str, guild_id: str):
-        role_id = int(interaction.data['values'][0])
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config[f"{ping_type}_ping"] = role_id
-        utils.save_guild_config(guild_id, guild_config)
-        role = interaction.guild.get_role(role_id)
-        await interaction.response.edit_message(content=f"✅ {ping_type.replace('_', ' ').title()} set to {role.mention}", view=None)
-
-    @set_group.command(name="sources", description="Set or reset source channels")
-    async def set_sources(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        if not await self._admin_check(interaction):
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        has_sources = bool(guild_config.get("default_source_channel_ids"))
-
-        cog_self = self
-
-        class SourceOptionsView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=300)
-
-            @discord.ui.button(label="Set New Sources", style=discord.ButtonStyle.primary)
-            async def btn_set(self_inner, inter: discord.Interaction, button: discord.ui.Button):
-                modal = SourceModal()
-                modal.guild_id = guild_id
-                modal.original_user = inter.user
-                await inter.response.send_modal(modal)
-
-            @discord.ui.button(label="Reset to All Channels", style=discord.ButtonStyle.danger)
-            async def btn_reset(self_inner, inter: discord.Interaction, button: discord.ui.Button):
-                await inter.response.defer(ephemeral=True)
-                gc = utils.load_guild_config(guild_id)
-                old_sources = gc.get("default_source_channel_ids", [])
-                gc["default_source_channel_ids"] = []
-                if "keyword_channel_map" in gc:
-                    for cfg in gc["keyword_channel_map"].values():
-                        cfg["source_channel_ids"] = []
-                if "pack_channel_map" in gc:
-                    for cfg in gc["pack_channel_map"].values():
-                        cfg["source_channel_ids"] = []
-                utils.save_guild_config(guild_id, gc)
-                sources_mention = ', '.join([f'<#{sid}>' for sid in old_sources]) if old_sources else "None"
-                embed = discord.Embed(
-                    title="✅ Sources Reset",
-                    description=f"**Previous:** {sources_mention}\n**New:** All channels",
-                    color=discord.Color.green()
-                )
-                await inter.followup.send(embed=embed, ephemeral=True)
-
-        current_sources = guild_config.get("default_source_channel_ids", [])
-        sources_mention = ', '.join([f'<#{sid}>' for sid in current_sources]) if current_sources else "All channels"
-        embed = discord.Embed(
-            title="📡 Manage Source Channels",
-            description=f"**Current Sources:** {sources_mention}\n\nWhat do you want to do?",
-            color=discord.Color.blue()
-        )
-        await interaction.followup.send(embed=embed, view=SourceOptionsView(), ephemeral=True)
-
-    # ── Filter commands (standalone, used by all admins) ─────────────────────
+        embed = discord.Embed(title="⚙️ Server Configuration", description="Select what you want to configure:", color=discord.Color.blurple())
+        await interaction.followup.send(embed=embed, view=SetSelectView(guild_id), ephemeral=True)
 
     @app_commands.command(name="clearfilters", description="Clear all filters of a selected type")
     @app_commands.describe(filter_type="Type of filters to clear")
@@ -250,14 +321,12 @@ class ConfigCog(commands.Cog):
     async def clearfilters(self, interaction: discord.Interaction, filter_type: str):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
             return
         guild_id = str(interaction.guild.id)
         guild_config = utils.load_guild_config(guild_id)
         if not guild_config or (not guild_config.get("keyword_channel_map") and not guild_config.get("pack_channel_map")):
-            embed = discord.Embed(title="Error", description="No filters configured for this server.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="No filters configured for this server.", color=discord.Color.red()), ephemeral=True)
             return
         cleared = False
         cleared_count = 0
@@ -272,13 +341,11 @@ class ConfigCog(commands.Cog):
                 del guild_config["pack_channel_map"]
                 cleared = True
         if not cleared:
-            embed = discord.Embed(title="Error", description=f"No {filter_type} filters found.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"No {filter_type} filters found.", color=discord.Color.red()), ephemeral=True)
             return
         utils.save_guild_config(guild_id, guild_config)
         type_name = {"normal": "Normal", "pack": "Pack", "all": "All"}[filter_type]
-        embed = discord.Embed(title="Filters Cleared", description=f"{cleared_count} {type_name} filter(s) cleared successfully.", color=discord.Color.green())
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=discord.Embed(title="Filters Cleared", description=f"{cleared_count} {type_name} filter(s) cleared.", color=discord.Color.green()))
 
     @app_commands.command(name="setfilter", description="Configuration of Filter for TCGP Rerolling")
     @app_commands.describe(
@@ -291,29 +358,20 @@ class ConfigCog(commands.Cog):
     )
     @app_commands.choices(filter_keyword=utils.FILTER_CHOICES)
     async def setfilter(
-        self,
-        interaction: discord.Interaction,
-        filter_keyword: str,
-        channel: discord.TextChannel = None,
-        source_channels: str = None,
-        godpack_ping: discord.Role = None,
-        invgodpack_ping: discord.Role = None,
+        self, interaction: discord.Interaction, filter_keyword: str,
+        channel: discord.TextChannel = None, source_channels: str = None,
+        godpack_ping: discord.Role = None, invgodpack_ping: discord.Role = None,
         safe_trade_ping: discord.Role = None
     ):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
             return
-
         guild_id = str(interaction.guild.id)
         guild_config = utils.load_guild_config(guild_id)
-
         if filter_keyword.lower() not in utils.CUSTOM_EMBED_TEXT:
-            embed = discord.Embed(title="Error", description=f"Invalid Filter: '{filter_keyword}'.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Invalid Filter: '{filter_keyword}'.", color=discord.Color.red()), ephemeral=True)
             return
-
         target_channel = channel
         if not target_channel:
             keyword_to_cat = {
@@ -338,25 +396,20 @@ class ConfigCog(commands.Cog):
                             }
                             target_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
                         except discord.Forbidden:
-                            embed = discord.Embed(title="Error", description="Bot lacks permission to create channels.", color=discord.Color.red())
-                            await interaction.followup.send(embed=embed, ephemeral=True)
+                            await interaction.followup.send(embed=discord.Embed(title="Error", description="Bot lacks permission to create channels.", color=discord.Color.red()), ephemeral=True)
                             return
             if not target_channel:
-                embed = discord.Embed(title="Error", description="Could not auto-create channel. Provide one manually.", color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=discord.Embed(title="Error", description="Could not auto-create channel. Provide one manually.", color=discord.Color.red()), ephemeral=True)
                 return
-
         source_channel_ids = []
         if source_channels:
-            matches = re.findall(r'<#(\d+)>', source_channels)
-            for match in matches:
+            for match in re.findall(r'<#(\d+)>', source_channels):
                 try:
-                    channel_id = int(match)
-                    if interaction.client.get_channel(channel_id):
-                        source_channel_ids.append(channel_id)
+                    ch_id = int(match)
+                    if interaction.client.get_channel(ch_id):
+                        source_channel_ids.append(ch_id)
                 except ValueError:
                     pass
-
         if "keyword_channel_map" not in guild_config:
             guild_config["keyword_channel_map"] = {}
         guild_config["keyword_channel_map"][filter_keyword.lower()] = {
@@ -370,43 +423,31 @@ class ConfigCog(commands.Cog):
         if safe_trade_ping:
             guild_config["safe_trade_ping"] = safe_trade_ping.id
         utils.save_guild_config(guild_id, guild_config)
-
         sources_mention = ", ".join([f"<#{sid}>" for sid in source_channel_ids]) if source_channel_ids else "All channels"
-        embed = discord.Embed(
+        await interaction.followup.send(embed=discord.Embed(
             title="New Filter Set",
-            description=f"Filter '{filter_keyword}' is now being used for {target_channel.mention}.\n"
-                        f"Source Channels: {sources_mention}\n"
+            description=f"Filter '{filter_keyword}' → {target_channel.mention}\nSources: {sources_mention}\n"
                         f"God Pack Ping: {godpack_ping.mention if godpack_ping else 'Not set'}\n"
                         f"Invalid God Pack Ping: {invgodpack_ping.mention if invgodpack_ping else 'Not set'}\n"
                         f"Safe for Trade Ping: {safe_trade_ping.mention if safe_trade_ping else 'Not set'}",
             color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed)
+        ))
 
     @app_commands.command(name="setpackfilter", description="Configuration of Filter for Packs")
     @app_commands.describe(
         pack="The Pack (ignored in series mode; sets all in series)",
-        channel="The target channel for the pack forwarding (optional; auto-creates if omitted)",
-        source_channels="Space-separated source channel mentions (optional, e.g., #channel1 #channel2)"
+        channel="The target channel (optional; auto-creates if omitted)",
+        source_channels="Space-separated source channel mentions (optional)"
     )
     @app_commands.autocomplete(pack=utils.autocomplete_packs)
-    async def setpackfilter(
-        self,
-        interaction: discord.Interaction,
-        pack: str,
-        channel: discord.TextChannel = None,
-        source_channels: str = None
-    ):
+    async def setpackfilter(self, interaction: discord.Interaction, pack: str, channel: discord.TextChannel = None, source_channels: str = None):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
             return
-
         guild_id = str(interaction.guild.id)
         guild_config = utils.load_guild_config(guild_id)
         pack_mode = guild_config.get("pack_channel_mode", "series")
-
         if pack_mode == "series":
             series_name = None
             for s, packs_in_s in utils.config.get("series", {}).items():
@@ -414,19 +455,16 @@ class ConfigCog(commands.Cog):
                     series_name = s
                     break
             if not series_name:
-                embed = discord.Embed(title="Error", description=f"Pack '{pack}' not in any series.", color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Pack '{pack}' not in any series.", color=discord.Color.red()), ephemeral=True)
                 return
             packs_to_set = [p.lower() for p in utils.config["series"][series_name]]
             embed_desc = f"Series '{series_name}' ({len(packs_to_set)} packs)"
         else:
             if pack.lower() not in [p.lower() for p in utils.PACKS]:
-                embed = discord.Embed(title="Error", description=f"Invalid Pack: '{pack}'.", color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Invalid Pack: '{pack}'.", color=discord.Color.red()), ephemeral=True)
                 return
             packs_to_set = [pack.lower()]
             embed_desc = f"Pack '{pack}'"
-
         target_channel = channel
         if not target_channel:
             s_name = next((s for s, packs_in_s in utils.config.get("series", {}).items() if any(p.lower() == packs_to_set[0] for p in packs_in_s)), None)
@@ -436,32 +474,27 @@ class ConfigCog(commands.Cog):
                     channel_name = f"{s_name.lower().replace(' ', '-')}-packs" if pack_mode == "series" else f"{packs_to_set[0]}-pack"
                     target_channel = discord.utils.get(category.text_channels, name=channel_name)
                     if not target_channel:
-                        overwrites = {
-                            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                            interaction.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                        }
                         try:
+                            overwrites = {
+                                interaction.guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+                                interaction.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+                            }
                             target_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
                         except discord.Forbidden:
-                            embed = discord.Embed(title="Error", description="Bot lacks permission to create channels.", color=discord.Color.red())
-                            await interaction.followup.send(embed=embed, ephemeral=True)
+                            await interaction.followup.send(embed=discord.Embed(title="Error", description="Bot lacks permission to create channels.", color=discord.Color.red()), ephemeral=True)
                             return
             if not target_channel:
-                embed = discord.Embed(title="Error", description="Could not auto-create channel. Provide one manually.", color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=discord.Embed(title="Error", description="Could not auto-create channel. Provide one manually.", color=discord.Color.red()), ephemeral=True)
                 return
-
         source_channel_ids = []
         if source_channels:
-            matches = re.findall(r'<#(\d+)>', source_channels)
-            for match in matches:
+            for match in re.findall(r'<#(\d+)>', source_channels):
                 try:
-                    channel_id = int(match)
-                    if interaction.client.get_channel(channel_id):
-                        source_channel_ids.append(channel_id)
+                    ch_id = int(match)
+                    if interaction.client.get_channel(ch_id):
+                        source_channel_ids.append(ch_id)
                 except ValueError:
                     pass
-
         if "pack_channel_map" not in guild_config:
             guild_config["pack_channel_map"] = {}
         for p in packs_to_set:
@@ -470,14 +503,12 @@ class ConfigCog(commands.Cog):
                 "source_channel_ids": source_channel_ids if source_channel_ids else None
             }
         utils.save_guild_config(guild_id, guild_config)
-
         sources_mention = ", ".join([f"<#{sid}>" for sid in source_channel_ids]) if source_channel_ids else "All channels"
-        embed = discord.Embed(
+        await interaction.followup.send(embed=discord.Embed(
             title="New Pack Filter Set",
-            description=f"{embed_desc} is now being forwarded to {target_channel.mention}.\nSource Channels: {sources_mention}",
+            description=f"{embed_desc} → {target_channel.mention}\nSources: {sources_mention}",
             color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed)
+        ))
 
     @app_commands.command(name="removefilter", description="Remove a certain filter from the configuration")
     @app_commands.describe(filter_keyword="Filter to remove")
@@ -485,21 +516,18 @@ class ConfigCog(commands.Cog):
     async def removefilter(self, interaction: discord.Interaction, filter_keyword: str):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
             return
         guild_id = str(interaction.guild.id)
         guild_config = utils.load_guild_config(guild_id)
         if "keyword_channel_map" not in guild_config or filter_keyword.lower() not in guild_config["keyword_channel_map"]:
-            embed = discord.Embed(title="Error", description=f"Filter '{filter_keyword}' not found in configuration.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Filter '{filter_keyword}' not found.", color=discord.Color.red()), ephemeral=True)
             return
         del guild_config["keyword_channel_map"][filter_keyword.lower()]
         if not guild_config["keyword_channel_map"]:
             del guild_config["keyword_channel_map"]
         utils.save_guild_config(guild_id, guild_config)
-        embed = discord.Embed(title="Filter Removed", description=f"Filter '{filter_keyword}' was successfully removed.", color=discord.Color.green())
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=discord.Embed(title="Filter Removed", description=f"Filter '{filter_keyword}' removed.", color=discord.Color.green()))
 
     @app_commands.command(name="removepackfilter", description="Remove a certain pack filter from the configuration")
     @app_commands.describe(pack="Pack to remove")
@@ -507,21 +535,18 @@ class ConfigCog(commands.Cog):
     async def removepackfilter(self, interaction: discord.Interaction, pack: str):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
             return
         guild_id = str(interaction.guild.id)
         guild_config = utils.load_guild_config(guild_id)
         if "pack_channel_map" not in guild_config or pack.lower() not in guild_config["pack_channel_map"]:
-            embed = discord.Embed(title="Error", description=f"Pack filter '{pack}' not found in configuration.", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Pack filter '{pack}' not found.", color=discord.Color.red()), ephemeral=True)
             return
         del guild_config["pack_channel_map"][pack.lower()]
         if not guild_config["pack_channel_map"]:
             del guild_config["pack_channel_map"]
         utils.save_guild_config(guild_id, guild_config)
-        embed = discord.Embed(title="Pack Filter Removed", description=f"Pack filter '{pack}' was successfully removed.", color=discord.Color.green())
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=discord.Embed(title="Pack Filter Removed", description=f"Pack filter '{pack}' removed.", color=discord.Color.green()))
 
 
 async def setup(bot: commands.Bot):
