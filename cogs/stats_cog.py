@@ -2,31 +2,27 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import re
 import utils
 from datetime import datetime
 
 
-class PostToChannelModal(discord.ui.Modal, title="Post Stats to Channel"):
-    channel_input = discord.ui.TextInput(label="Channel", placeholder="#channel or channel ID", min_length=1, max_length=100)
-
+class PostChannelSelectView(discord.ui.View):
     def __init__(self, stat_type: str, guild_id: str):
-        super().__init__()
+        super().__init__(timeout=60)
         self.stat_type = stat_type
         self.guild_id = guild_id
+        select = discord.ui.ChannelSelect(
+            placeholder="Select a channel...",
+            channel_types=[discord.ChannelType.text]
+        )
+        select.callback = self.on_channel_select
+        self.add_item(select)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_channel_select(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        value = self.channel_input.value.strip()
-        match = re.search(r'(\d{17,20})', value)
-        channel = None
-        if match:
-            channel = interaction.guild.get_channel(int(match.group(1)))
+        channel = interaction.guild.get_channel(interaction.data["values"][0])
         if not channel:
-            name = value.lstrip('#').lower()
-            channel = discord.utils.get(interaction.guild.text_channels, name=name)
-        if not channel:
-            await interaction.followup.send("❌ Channel not found. Use #mention or channel ID.", ephemeral=True)
+            await interaction.followup.send("❌ Channel not found.", ephemeral=True)
             return
 
         guild_config = utils.load_guild_config(self.guild_id)
@@ -36,25 +32,21 @@ class PostToChannelModal(discord.ui.Modal, title="Post Stats to Channel"):
             sent = await channel.send(embed=embed)
             guild_config["stats_channel_id"] = channel.id
             guild_config["stats_message_id"] = sent.id
-            utils.save_guild_config(self.guild_id, guild_config)
             title = "Stats Embed Posted"
-
         elif self.stat_type == "detailed":
             embed = utils.create_detailed_stats_embed(guild_config)
             sent = await channel.send(embed=embed)
             guild_config["detailed_stats_channel_id"] = channel.id
             guild_config["detailed_stats_message_id"] = sent.id
-            utils.save_guild_config(self.guild_id, guild_config)
             title = "Detailed Stats Embed Posted"
-
         elif self.stat_type == "pack":
             embed = utils.create_pack_stats_embed(guild_config)
             sent = await channel.send(embed=embed)
             guild_config["pack_stats_channel_id"] = channel.id
             guild_config["pack_stats_message_id"] = sent.id
-            utils.save_guild_config(self.guild_id, guild_config)
             title = "Pack Stats Embed Posted"
 
+        utils.save_guild_config(self.guild_id, guild_config)
         await interaction.followup.send(
             embed=discord.Embed(title=f"✅ {title}", description=f"Posted in {channel.mention} — will auto-update.", color=discord.Color.green()),
             ephemeral=True
@@ -69,7 +61,10 @@ class StatsResultView(discord.ui.View):
 
     @discord.ui.button(label="📌 Post to Channel", style=discord.ButtonStyle.secondary)
     async def post_to_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(PostToChannelModal(self.stat_type, self.guild_id))
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="📌 Post to Channel", description="Select the channel to post the auto-updating embed:", color=discord.Color.blue()),
+            view=PostChannelSelectView(self.stat_type, self.guild_id)
+        )
 
 
 class StatsSelectView(discord.ui.View):
