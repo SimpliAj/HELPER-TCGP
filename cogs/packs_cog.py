@@ -685,6 +685,18 @@ class PacksCog(commands.Cog):
                     "and " + str(len(new_packs)) + " packs (" + (", ".join(new_packs) or "none") + ")",
                     command_name="auto_pack_sync"
                 )
+                try:
+                    owner_id = utils.config.get("owner_id")
+                    if owner_id:
+                        owner = await self.bot.fetch_user(int(owner_id))
+                        lines = ["**[Auto-Sync] New content detected:**"]
+                        if new_series:
+                            lines.append("📂 Series: " + ", ".join(new_series))
+                        if new_packs:
+                            lines.append("📦 Packs: " + ", ".join(new_packs))
+                        await owner.send("\n".join(lines))
+                except Exception as dm_err:
+                    print(f"[AutoSync] Failed to DM owner: {dm_err}")
         except Exception as e:
             print(f"[AutoSync] Error: {e}")
 
