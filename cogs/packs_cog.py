@@ -14,14 +14,8 @@ class PacksCog(commands.Cog):
         self.bot = bot
         self.auto_pack_sync.start()
 
-    @app_commands.command(name="addseries", description="Fügt eine neue Series zur Konfiguration hinzu (DEV only)")
-    @app_commands.describe(series_name="Der Name der neuen Series (z.B. 'B-Series')")
-    async def addseries(self, interaction: discord.Interaction, series_name: str):
-        await interaction.response.defer(ephemeral=True)
+    async def _do_addseries(self, interaction: discord.Interaction, series_name: str):
         try:
-            if not await utils.owner_only(interaction):
-                return
-
             series_lower = series_name.lower().strip()
             if not series_lower or len(series_lower) < 2:
                 embed = discord.Embed(title="Fehler", description="Series-Name muss mindestens 2 Zeichen lang sein.", color=discord.Color.red())
@@ -88,21 +82,22 @@ class PacksCog(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            print(f"Error in /addseries: {e}")
+            print(f"Error in _do_addseries: {e}")
             try:
                 await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
             except Exception:
                 pass
 
-    @app_commands.command(name="addpack", description="Fügt ein neues Pack zur Liste hinzu (Owner only)")
-    @app_commands.describe(pack_name="Der Name des neuen Packs (z.B. 'neuespack')", series="Die Series, in die das Pack hinzugefügt werden soll")
-    @app_commands.autocomplete(series=utils.autocomplete_series)
-    async def addpack(self, interaction: discord.Interaction, pack_name: str, series: str = "A-Series"):
+    @app_commands.command(name="addseries", description="Fügt eine neue Series zur Konfiguration hinzu (DEV only)")
+    @app_commands.describe(series_name="Der Name der neuen Series (z.B. 'B-Series')")
+    async def addseries(self, interaction: discord.Interaction, series_name: str):
         await interaction.response.defer(ephemeral=True)
-        try:
-            if not await utils.owner_only(interaction):
-                return
+        if not await utils.owner_only(interaction):
+            return
+        await self._do_addseries(interaction, series_name)
 
+    async def _do_addpack(self, interaction: discord.Interaction, pack_name: str, series: str):
+        try:
             pack_lower = pack_name.lower().strip()
             if not pack_lower or len(pack_lower) < 2:
                 embed = discord.Embed(title="Fehler", description="Pack-Name muss mindestens 2 Zeichen lang sein.", color=discord.Color.red())
@@ -203,21 +198,23 @@ class PacksCog(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            print(f"Error in /addpack: {e}")
+            print(f"Error in _do_addpack: {e}")
             try:
                 await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
             except Exception:
                 pass
 
-    @app_commands.command(name="removepack", description="Entfernt ein Pack aus der Liste (Owner only)")
-    @app_commands.describe(pack_name="Der Name des zu entfernenden Packs")
-    @app_commands.autocomplete(pack_name=utils.autocomplete_packs)
-    async def removepack(self, interaction: discord.Interaction, pack_name: str):
+    @app_commands.command(name="addpack", description="Fügt ein neues Pack zur Liste hinzu (Owner only)")
+    @app_commands.describe(pack_name="Der Name des neuen Packs (z.B. 'neuespack')", series="Die Series, in die das Pack hinzugefügt werden soll")
+    @app_commands.autocomplete(series=utils.autocomplete_series)
+    async def addpack(self, interaction: discord.Interaction, pack_name: str, series: str = "A-Series"):
         await interaction.response.defer(ephemeral=True)
-        try:
-            if not await utils.owner_only(interaction):
-                return
+        if not await utils.owner_only(interaction):
+            return
+        await self._do_addpack(interaction, pack_name, series)
 
+    async def _do_removepack(self, interaction: discord.Interaction, pack_name: str):
+        try:
             pack_lower = pack_name.lower()
             if pack_lower not in [p.lower() for p in utils.PACKS]:
                 embed = discord.Embed(title="Fehler", description=f"Pack '{pack_name}' nicht gefunden.", color=discord.Color.red())
@@ -296,21 +293,23 @@ class PacksCog(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            print(f"Error in /removepack: {e}")
+            print(f"Error in _do_removepack: {e}")
             try:
                 await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
             except Exception:
                 pass
 
-    @app_commands.command(name="removeseries", description="Removes a series globally and deletes all channels/category in all setup guilds (Owner only)")
-    @app_commands.describe(series_name="The name of the series to remove (e.g., 'B-Series')")
-    @app_commands.autocomplete(series_name=utils.autocomplete_series)
-    async def removeseries(self, interaction: discord.Interaction, series_name: str):
+    @app_commands.command(name="removepack", description="Entfernt ein Pack aus der Liste (Owner only)")
+    @app_commands.describe(pack_name="Der Name des zu entfernenden Packs")
+    @app_commands.autocomplete(pack_name=utils.autocomplete_packs)
+    async def removepack(self, interaction: discord.Interaction, pack_name: str):
         await interaction.response.defer(ephemeral=True)
-        try:
-            if not await utils.owner_only(interaction):
-                return
+        if not await utils.owner_only(interaction):
+            return
+        await self._do_removepack(interaction, pack_name)
 
+    async def _do_removeseries(self, interaction: discord.Interaction, series_name: str):
+        try:
             if series_name not in utils.config["series"]:
                 embed = discord.Embed(title="Fehler", description=f"Series '{series_name}' nicht gefunden.", color=discord.Color.red())
                 await interaction.followup.send(embed=embed, ephemeral=True)
@@ -379,11 +378,20 @@ class PacksCog(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            print(f"Error in /removeseries: {e}")
+            print(f"Error in _do_removeseries: {e}")
             try:
                 await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
             except Exception:
                 pass
+
+    @app_commands.command(name="removeseries", description="Removes a series globally and deletes all channels/category in all setup guilds (Owner only)")
+    @app_commands.describe(series_name="The name of the series to remove (e.g., 'B-Series')")
+    @app_commands.autocomplete(series_name=utils.autocomplete_series)
+    async def removeseries(self, interaction: discord.Interaction, series_name: str):
+        await interaction.response.defer(ephemeral=True)
+        if not await utils.owner_only(interaction):
+            return
+        await self._do_removeseries(interaction, series_name)
 
     @app_commands.command(name="createpackcategory", description="Create a category for a pack with Save 4 Trade channels (Admin only)")
     @app_commands.autocomplete(pack=utils.autocomplete_packs)
