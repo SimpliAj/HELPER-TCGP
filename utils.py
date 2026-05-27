@@ -229,6 +229,7 @@ def load_guild_config(guild_id):
 def save_guild_config(guild_id, guild_config):
     """Save guild config (thread-safe, async) with backup rotation (max 3)."""
     import copy
+    config_snapshot = copy.deepcopy(guild_config)
 
     def _save():
         with config_save_lock:
@@ -264,10 +265,9 @@ def save_guild_config(guild_id, guild_config):
                     except Exception as backup_error:
                         print(f"⚠️ Could not create backup rotation for {guild_id}: {backup_error}")
 
-                config_copy = copy.deepcopy(guild_config)
                 tmp_path = config_path + ".tmp"
                 with open(tmp_path, "w") as f:
-                    json.dump(config_copy, f, indent=4)
+                    json.dump(config_snapshot, f, indent=4)
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp_path, config_path)
