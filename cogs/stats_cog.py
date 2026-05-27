@@ -1,9 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import asyncio
 import utils
-from datetime import datetime
 
 
 class PostChannelSelectView(discord.ui.View):
@@ -107,33 +105,6 @@ class StatsCog(commands.Cog):
         guild_id = str(interaction.guild.id)
         embed = discord.Embed(title="📊 Statistics", description="Select which stats to view:", color=discord.Color.blurple())
         await interaction.followup.send(embed=embed, view=StatsSelectView(guild_id), ephemeral=True)
-
-    @app_commands.command(name="lifetimestats", description="Shows lifetime statistics across all servers (Owner only)")
-    @app_commands.describe(channel="Optional: The channel to post the auto-updating lifetime stats embed")
-    async def lifetimestats(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
-        await interaction.response.defer(ephemeral=False)
-        if not await utils.owner_only(interaction):
-            return
-
-        embed = await asyncio.to_thread(utils.create_lifetime_stats_embed)
-
-        if channel:
-            sent_message = await channel.send(embed=embed)
-            now = datetime.now(utils.BERLIN_TZ)
-            message_key = f"{interaction.guild.id}_{channel.id}"
-            utils.LIFETIME_STATS_MESSAGES[message_key] = {
-                "channel_id": str(channel.id),
-                "message_id": str(sent_message.id),
-                "guild_id": str(interaction.guild.id),
-                "posted_at": now
-            }
-            utils.save_lifetime_stats_messages()
-            await interaction.followup.send(
-                embed=discord.Embed(title="✅ Lifetime Stats Posted", description=f"Posted in {channel.mention}, auto-updates every minute.", color=discord.Color.gold()),
-                ephemeral=True
-            )
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

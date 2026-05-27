@@ -1,7 +1,9 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import asyncio
 import utils
+from datetime import datetime
 
 
 class AddSeriesModal(discord.ui.Modal, title="Add Series"):
@@ -69,6 +71,40 @@ class RemoveSeriesModal(discord.ui.Modal, title="Remove Series"):
         await packs_cog._do_removeseries(interaction, self.series_name.value)
 
 
+class LifetimeStatsPostView(discord.ui.View):
+    def __init__(self, embed: discord.Embed, guild_id: int):
+        super().__init__(timeout=60)
+        self.embed = embed
+        self.guild_id = guild_id
+        select = discord.ui.ChannelSelect(
+            placeholder="Select channel to post auto-updating embed...",
+            channel_types=[discord.ChannelType.text]
+        )
+        select.callback = self.on_channel_select
+        self.add_item(select)
+
+    async def on_channel_select(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        channel = interaction.guild.get_channel(int(interaction.data["values"][0]))
+        if not channel:
+            await interaction.followup.send("❌ Channel not found.", ephemeral=True)
+            return
+        sent_message = await channel.send(embed=self.embed)
+        now = datetime.now(utils.BERLIN_TZ)
+        message_key = f"{self.guild_id}_{channel.id}"
+        utils.LIFETIME_STATS_MESSAGES[message_key] = {
+            "channel_id": str(channel.id),
+            "message_id": str(sent_message.id),
+            "guild_id": str(self.guild_id),
+            "posted_at": now
+        }
+        utils.save_lifetime_stats_messages()
+        await interaction.followup.send(
+            embed=discord.Embed(title="✅ Lifetime Stats Posted", description=f"Posted in {channel.mention}, auto-updates every 15 minutes.", color=discord.Color.gold()),
+            ephemeral=True
+        )
+
+
 class DevPanelView(discord.ui.View):
     def __init__(self, bot: commands.Bot):
         super().__init__(timeout=120)
@@ -130,6 +166,18 @@ class DevPanelView(discord.ui.View):
             return
         await interaction.response.send_modal(RemoveSeriesModal(self.bot))
 
+    @discord.ui.button(label="Lifetime Stats", style=discord.ButtonStyle.secondary, emoji="🌍", row=3)
+    async def lifetime_stats(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        embed = await asyncio.to_thread(utils.create_lifetime_stats_embed)
+        await interaction.followup.send(
+            embed=embed,
+            view=LifetimeStatsPostView(embed, interaction.guild.id),
+            ephemeral=True
+        )
+
 
 class DevCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -148,6 +196,7 @@ class DevCog(commands.Cog):
         embed.add_field(name="Row 1", value="🔍 Run Pack Scan  •  🔄 Sync Commands", inline=False)
         embed.add_field(name="Row 2", value="📂 Add Series  •  📦 Add Pack", inline=False)
         embed.add_field(name="Row 3", value="🗑️ Remove Pack  •  ❌ Remove Series", inline=False)
+        embed.add_field(name="Row 4", value="🌍 Lifetime Stats (view + post to channel)", inline=False)
         await interaction.followup.send(embed=embed, view=DevPanelView(self.bot), ephemeral=True)
 
 

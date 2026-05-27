@@ -174,8 +174,7 @@ class GeneralCog(commands.Cog):
         )
         embed.add_field(
             name="🔧 Dev Commands (Owner only)",
-            value="**/devpanel** – Developer control panel (pack scan, sync, add/remove series & packs)\n"
-                  "**/lifetimestats** – Global stats from all servers",
+            value="**/devpanel** – Developer control panel (pack scan, sync, series/pack management, lifetime stats)",
             inline=False
         )
         embed.add_field(
