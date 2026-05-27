@@ -20,7 +20,7 @@ class PostChannelSelectView(discord.ui.View):
 
     async def on_channel_select(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        channel = interaction.guild.get_channel(interaction.data["values"][0])
+        channel = interaction.guild.get_channel(int(interaction.data["values"][0]))
         if not channel:
             await interaction.followup.send("❌ Channel not found.", ephemeral=True)
             return

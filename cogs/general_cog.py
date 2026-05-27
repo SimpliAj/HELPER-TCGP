@@ -154,41 +154,28 @@ class GeneralCog(commands.Cog):
             inline=False
         )
         embed.add_field(
-            name="⚙️ Filter Setup (Admin)",
+            name="⚙️ Setup & Configuration (Admin)",
             value="**/setup** – Setup the whole Discord Bot with one command\n"
-                  "**/setfilter** – Configure filter for cards\n"
-                  "**/setpackfilter** – Set up pack filters\n"
-                  "**/setpackmode** – Choose pack channel mode (series or per pack)\n"
-                  "**/createpackcategory** – Create a pack-specific category with Save 4 Trade channels\n"
-                  "**/clearfilters** – Clear all filters (by type)\n"
-                  "**/removefilter** – Remove a single filter\n"
-                  "**/removepackfilter** – Remove a pack filter\n"
-                  "**/showfilters** – Show all active filters",
+                  "**/configure** – Configure bot settings (pack mode, status, heartbeat, validator role, ping roles, sources)\n"
+                  "**/createpackcategory** – Create a pack-specific category with Save 4 Trade channels",
             inline=False
         )
         embed.add_field(
-            name="🔒 Validation (Admin)",
-            value="**/setstatus** – Enable/disable traded buttons (for Safe 4 Trade)\n"
-                  "**/setvalidatorrole** – Set role for validators\n"
-                  "**/setpingroles** – Set ping roles for god pack, invalid, or safe trade",
+            name="🔍 Filter Management (Admin)",
+            value="**/setfilter** – Add or update a keyword card filter\n"
+                  "**/setpackfilter** – Add or update a pack filter\n"
+                  "**/filters** – View, remove and clear filters",
             inline=False
         )
         embed.add_field(
             name="📊 Statistics",
-            value="**/stats** – Server stats (validation/trade)\n"
-                  "**/detailedstats** – Detailed filter stats\n"
-                  "**/packstats** – Pack-specific stats\n"
-                  "**/setheartbeat** – Set up heartbeat monitor",
+            value="**/stats** – Server stats: Overview / Detailed / Pack — with option to post auto-updating embed",
             inline=False
         )
         embed.add_field(
             name="🔧 Dev Commands (Owner only)",
-            value="**/lifetimestats** – Global stats from all servers\n"
-                  "**/addseries** – Add a new series for packs\n"
-                  "**/addpack** – Add pack to a series\n"
-                  "**/removepack** – Remove a pack\n"
-                  "**/removeseries** – Remove a series and delete channels/category\n"
-                  "**/sync** – Resync commands",
+            value="**/devpanel** – Developer control panel (pack scan, sync, add/remove series & packs)\n"
+                  "**/lifetimestats** – Global stats from all servers",
             inline=False
         )
         embed.add_field(
