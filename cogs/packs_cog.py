@@ -88,13 +88,7 @@ class PacksCog(commands.Cog):
             except Exception:
                 pass
 
-    @app_commands.command(name="addseries", description="Fügt eine neue Series zur Konfiguration hinzu (DEV only)")
-    @app_commands.describe(series_name="Der Name der neuen Series (z.B. 'B-Series')")
-    async def addseries(self, interaction: discord.Interaction, series_name: str):
-        await interaction.response.defer(ephemeral=True)
-        if not await utils.owner_only(interaction):
-            return
-        await self._do_addseries(interaction, series_name)
+
 
     async def _do_addpack(self, interaction: discord.Interaction, pack_name: str, series: str):
         try:
@@ -204,14 +198,6 @@ class PacksCog(commands.Cog):
             except Exception:
                 pass
 
-    @app_commands.command(name="addpack", description="Fügt ein neues Pack zur Liste hinzu (Owner only)")
-    @app_commands.describe(pack_name="Der Name des neuen Packs (z.B. 'neuespack')", series="Die Series, in die das Pack hinzugefügt werden soll")
-    @app_commands.autocomplete(series=utils.autocomplete_series)
-    async def addpack(self, interaction: discord.Interaction, pack_name: str, series: str = "A-Series"):
-        await interaction.response.defer(ephemeral=True)
-        if not await utils.owner_only(interaction):
-            return
-        await self._do_addpack(interaction, pack_name, series)
 
     async def _do_removepack(self, interaction: discord.Interaction, pack_name: str):
         try:
@@ -299,14 +285,6 @@ class PacksCog(commands.Cog):
             except Exception:
                 pass
 
-    @app_commands.command(name="removepack", description="Entfernt ein Pack aus der Liste (Owner only)")
-    @app_commands.describe(pack_name="Der Name des zu entfernenden Packs")
-    @app_commands.autocomplete(pack_name=utils.autocomplete_packs)
-    async def removepack(self, interaction: discord.Interaction, pack_name: str):
-        await interaction.response.defer(ephemeral=True)
-        if not await utils.owner_only(interaction):
-            return
-        await self._do_removepack(interaction, pack_name)
 
     async def _do_removeseries(self, interaction: discord.Interaction, series_name: str):
         try:
@@ -384,14 +362,7 @@ class PacksCog(commands.Cog):
             except Exception:
                 pass
 
-    @app_commands.command(name="removeseries", description="Removes a series globally and deletes all channels/category in all setup guilds (Owner only)")
-    @app_commands.describe(series_name="The name of the series to remove (e.g., 'B-Series')")
-    @app_commands.autocomplete(series_name=utils.autocomplete_series)
-    async def removeseries(self, interaction: discord.Interaction, series_name: str):
-        await interaction.response.defer(ephemeral=True)
-        if not await utils.owner_only(interaction):
-            return
-        await self._do_removeseries(interaction, series_name)
+
 
     @app_commands.command(name="createpackcategory", description="Create a category for a pack with Save 4 Trade channels (Admin only)")
     @app_commands.autocomplete(pack=utils.autocomplete_packs)
