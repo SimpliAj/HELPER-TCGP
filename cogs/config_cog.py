@@ -335,7 +335,7 @@ class ConfigCog(commands.Cog):
 
         return embed
 
-    @app_commands.command(name="set", description="Server configuration (Admin only)")
+    @app_commands.command(name="configure", description="Server configuration (Admin only)")
     async def set_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
