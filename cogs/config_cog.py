@@ -296,6 +296,160 @@ class StatusView(discord.ui.View):
         )
 
 
+# ── /filters helpers ──────────────────────────────────────────────────────────
+
+def build_filters_embed(guild: discord.Guild, gc: dict) -> discord.Embed:
+    keyword_map = gc.get("keyword_channel_map", {})
+    pack_map = gc.get("pack_channel_map", {})
+    pack_mode = gc.get("pack_channel_mode", "series")
+
+    embed = discord.Embed(
+        title="🔍 Active Filters",
+        description=f"Pack Mode: **{pack_mode.title()}** — select an action below.",
+        color=discord.Color.blurple()
+    )
+
+    if keyword_map:
+        lines = []
+        for kw, cfg in keyword_map.items():
+            ch = guild.get_channel(cfg["channel_id"])
+            ch_str = ch.mention if ch else f"<#{cfg['channel_id']}>"
+            src = "Custom" if cfg.get("source_channel_ids") else "All channels"
+            lines.append(f"**{kw.title()}** → {ch_str} ({src})")
+        embed.add_field(name="Keyword Filters", value="\n".join(lines), inline=False)
+    else:
+        embed.add_field(name="Keyword Filters", value="*none*", inline=False)
+
+    if pack_map:
+        by_series: dict = {}
+        for pack, cfg in pack_map.items():
+            series = next((s for s, packs in utils.config["series"].items() if pack in [p.lower() for p in packs]), "Unassigned")
+            by_series.setdefault(series, [])
+            ch = guild.get_channel(cfg["channel_id"])
+            ch_str = ch.mention if ch else f"<#{cfg['channel_id']}>"
+            src = "Custom" if cfg.get("source_channel_ids") else "All channels"
+            by_series[series].append(f"**{pack.title()}** → {ch_str} ({src})")
+        for series_name, lines in by_series.items():
+            embed.add_field(name=f"Pack Filters — {series_name}", value="\n".join(lines), inline=False)
+    else:
+        embed.add_field(name="Pack Filters", value="*none*", inline=False)
+
+    return embed
+
+
+class FiltersView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        select = discord.ui.Select(
+            placeholder="Manage filters...",
+            options=[
+                discord.SelectOption(label="Remove Keyword Filter", value="remove_kw", emoji="🗑️", description="Remove a specific keyword filter"),
+                discord.SelectOption(label="Remove Pack Filter", value="remove_pack", emoji="🗑️", description="Remove a specific pack filter"),
+                discord.SelectOption(label="Clear Keyword Filters", value="clear_kw", emoji="❌", description="Delete all keyword filters"),
+                discord.SelectOption(label="Clear Pack Filters", value="clear_pack", emoji="❌", description="Delete all pack filters"),
+                discord.SelectOption(label="Clear All Filters", value="clear_all", emoji="🧹", description="Delete every filter"),
+            ]
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        gc = utils.load_guild_config(self.guild_id)
+        choice = interaction.data["values"][0]
+
+        if choice == "remove_kw":
+            kw_map = gc.get("keyword_channel_map", {})
+            if not kw_map:
+                await interaction.response.send_message("No keyword filters configured.", ephemeral=True)
+                return
+            opts = [discord.SelectOption(label=k.title(), value=k) for k in list(kw_map.keys())[:25]]
+            sel = discord.ui.Select(placeholder="Select keyword filter to remove...", options=opts)
+            guild_id = self.guild_id
+            async def remove_kw_cb(inter: discord.Interaction):
+                kw = inter.data["values"][0]
+                gc2 = utils.load_guild_config(guild_id)
+                gc2.get("keyword_channel_map", {}).pop(kw, None)
+                if not gc2.get("keyword_channel_map"):
+                    gc2.pop("keyword_channel_map", None)
+                utils.save_guild_config(guild_id, gc2)
+                await inter.response.edit_message(
+                    embed=discord.Embed(title="✅ Filter Removed", description=f"Keyword filter **{kw.title()}** removed.", color=discord.Color.green()),
+                    view=None
+                )
+            sel.callback = remove_kw_cb
+            v = discord.ui.View(); v.add_item(sel)
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="🗑️ Remove Keyword Filter", description="Select the filter to remove:", color=discord.Color.blue()),
+                view=v
+            )
+
+        elif choice == "remove_pack":
+            pack_map = gc.get("pack_channel_map", {})
+            if not pack_map:
+                await interaction.response.send_message("No pack filters configured.", ephemeral=True)
+                return
+            opts = [discord.SelectOption(label=p.title(), value=p) for p in list(pack_map.keys())[:25]]
+            sel = discord.ui.Select(placeholder="Select pack filter to remove...", options=opts)
+            guild_id = self.guild_id
+            async def remove_pack_cb(inter: discord.Interaction):
+                pack = inter.data["values"][0]
+                gc2 = utils.load_guild_config(guild_id)
+                gc2.get("pack_channel_map", {}).pop(pack, None)
+                if not gc2.get("pack_channel_map"):
+                    gc2.pop("pack_channel_map", None)
+                utils.save_guild_config(guild_id, gc2)
+                await inter.response.edit_message(
+                    embed=discord.Embed(title="✅ Pack Filter Removed", description=f"Pack filter **{pack.title()}** removed.", color=discord.Color.green()),
+                    view=None
+                )
+            sel.callback = remove_pack_cb
+            v = discord.ui.View(); v.add_item(sel)
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="🗑️ Remove Pack Filter", description="Select the pack filter to remove:", color=discord.Color.blue()),
+                view=v
+            )
+
+        elif choice in ("clear_kw", "clear_pack", "clear_all"):
+            label_map = {"clear_kw": "keyword", "clear_pack": "pack", "clear_all": "all"}
+            ftype = label_map[choice]
+            guild_id = self.guild_id
+
+            class ConfirmView(discord.ui.View):
+                def __init__(self):
+                    super().__init__(timeout=30)
+                @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger)
+                async def confirm(self_inner, inter: discord.Interaction, btn: discord.ui.Button):
+                    gc2 = utils.load_guild_config(guild_id)
+                    count = 0
+                    if ftype in ("keyword", "all") and "keyword_channel_map" in gc2:
+                        count += len(gc2["keyword_channel_map"])
+                        del gc2["keyword_channel_map"]
+                    if ftype in ("pack", "all") and "pack_channel_map" in gc2:
+                        count += len(gc2["pack_channel_map"])
+                        del gc2["pack_channel_map"]
+                    utils.save_guild_config(guild_id, gc2)
+                    await inter.response.edit_message(
+                        embed=discord.Embed(title="✅ Filters Cleared", description=f"{count} filter(s) removed.", color=discord.Color.green()),
+                        view=None
+                    )
+                @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+                async def cancel(self_inner, inter: discord.Interaction, btn: discord.ui.Button):
+                    await inter.response.edit_message(
+                        embed=discord.Embed(title="Cancelled", description="No filters were removed.", color=discord.Color.greyple()),
+                        view=None
+                    )
+
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    title=f"⚠️ Clear {ftype.title()} Filters",
+                    description=f"This will delete **all {ftype} filters**. Are you sure?",
+                    color=discord.Color.orange()
+                ),
+                view=ConfirmView()
+            )
+
+
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class ConfigCog(commands.Cog):
@@ -349,37 +503,16 @@ class ConfigCog(commands.Cog):
         embed = self._build_config_embed(interaction.guild, gc)
         await interaction.followup.send(embed=embed, view=SetSelectView(guild_id), ephemeral=True)
 
-    @app_commands.command(name="clearfilters", description="Clear all filters of a selected type")
-    @app_commands.describe(filter_type="Type of filters to clear")
-    @app_commands.choices(filter_type=utils.CLEAR_FILTER_CHOICES)
-    async def clearfilters(self, interaction: discord.Interaction, filter_type: str):
+    @app_commands.command(name="filters", description="View and manage active filters (Admin only)")
+    async def filters_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
             await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
             return
         guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        if not guild_config or (not guild_config.get("keyword_channel_map") and not guild_config.get("pack_channel_map")):
-            await interaction.followup.send(embed=discord.Embed(title="Error", description="No filters configured for this server.", color=discord.Color.red()), ephemeral=True)
-            return
-        cleared = False
-        cleared_count = 0
-        if filter_type in ("normal", "all"):
-            if "keyword_channel_map" in guild_config:
-                cleared_count += len(guild_config["keyword_channel_map"])
-                del guild_config["keyword_channel_map"]
-                cleared = True
-        if filter_type in ("pack", "all"):
-            if "pack_channel_map" in guild_config:
-                cleared_count += len(guild_config["pack_channel_map"])
-                del guild_config["pack_channel_map"]
-                cleared = True
-        if not cleared:
-            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"No {filter_type} filters found.", color=discord.Color.red()), ephemeral=True)
-            return
-        utils.save_guild_config(guild_id, guild_config)
-        type_name = {"normal": "Normal", "pack": "Pack", "all": "All"}[filter_type]
-        await interaction.followup.send(embed=discord.Embed(title="Filters Cleared", description=f"{cleared_count} {type_name} filter(s) cleared.", color=discord.Color.green()))
+        gc = utils.load_guild_config(guild_id)
+        embed = build_filters_embed(interaction.guild, gc)
+        await interaction.followup.send(embed=embed, view=FiltersView(guild_id), ephemeral=True)
 
     @app_commands.command(name="setfilter", description="Configuration of Filter for TCGP Rerolling")
     @app_commands.describe(
@@ -544,43 +677,6 @@ class ConfigCog(commands.Cog):
             color=discord.Color.green()
         ))
 
-    @app_commands.command(name="removefilter", description="Remove a certain filter from the configuration")
-    @app_commands.describe(filter_keyword="Filter to remove")
-    @app_commands.choices(filter_keyword=utils.FILTER_CHOICES)
-    async def removefilter(self, interaction: discord.Interaction, filter_keyword: str):
-        await interaction.response.defer(ephemeral=True)
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        if "keyword_channel_map" not in guild_config or filter_keyword.lower() not in guild_config["keyword_channel_map"]:
-            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Filter '{filter_keyword}' not found.", color=discord.Color.red()), ephemeral=True)
-            return
-        del guild_config["keyword_channel_map"][filter_keyword.lower()]
-        if not guild_config["keyword_channel_map"]:
-            del guild_config["keyword_channel_map"]
-        utils.save_guild_config(guild_id, guild_config)
-        await interaction.followup.send(embed=discord.Embed(title="Filter Removed", description=f"Filter '{filter_keyword}' removed.", color=discord.Color.green()))
-
-    @app_commands.command(name="removepackfilter", description="Remove a certain pack filter from the configuration")
-    @app_commands.describe(pack="Pack to remove")
-    @app_commands.autocomplete(pack=utils.autocomplete_packs)
-    async def removepackfilter(self, interaction: discord.Interaction, pack: str):
-        await interaction.response.defer(ephemeral=True)
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        if "pack_channel_map" not in guild_config or pack.lower() not in guild_config["pack_channel_map"]:
-            await interaction.followup.send(embed=discord.Embed(title="Error", description=f"Pack filter '{pack}' not found.", color=discord.Color.red()), ephemeral=True)
-            return
-        del guild_config["pack_channel_map"][pack.lower()]
-        if not guild_config["pack_channel_map"]:
-            del guild_config["pack_channel_map"]
-        utils.save_guild_config(guild_id, guild_config)
-        await interaction.followup.send(embed=discord.Embed(title="Pack Filter Removed", description=f"Pack filter '{pack}' removed.", color=discord.Color.green()))
 
 
 async def setup(bot: commands.Bot):

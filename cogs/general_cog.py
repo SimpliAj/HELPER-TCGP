@@ -25,8 +25,7 @@ class GeneralCog(commands.Cog):
         embed.set_image(url="attachment://card.png")
         await interaction.followup.send(embed=embed, file=file)
 
-    @app_commands.command(name="showfilters", description="Shows all active filters for this server")
-    async def showfilters(self, interaction: discord.Interaction):
+    async def _old_showfilters(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         guild_id = str(interaction.guild.id)
         guild_config = utils.load_guild_config(guild_id)
