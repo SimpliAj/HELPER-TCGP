@@ -13,7 +13,7 @@ TRADEABLE_RARITIES = {
 
 RARITY_EMOJI = {
     "rainbow": "🌈", "crown": "👑", "one star": "⭐", "three diamond": "💎",
-    "four diamond ex": "💎💎", "full art": "🎨", "shiny": "✨",
+    "four diamond ex": "🔷", "full art": "🎨", "shiny": "✨",
     "trainer": "🎓", "gimmighoul": "🪙", "god pack": "🌟",
 }
 
