@@ -460,7 +460,7 @@ class PacksCog(commands.Cog):
                 if channel:
                     guild_config["pack_specific_categories"][pack_lower]["channels"][keyword.lower()] = channel.id
 
-            utils.save_guild_config(guild_id, guild_config)
+            await asyncio.to_thread(utils.save_guild_config_sync, guild_id, guild_config)
 
             # Repost existing messages from source channels
             source_channel_ids = guild_config.get("default_source_channel_ids", [])
