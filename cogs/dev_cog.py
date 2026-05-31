@@ -126,8 +126,10 @@ class DevPanelView(discord.ui.View):
             await interaction.followup.send("PacksCog not loaded.", ephemeral=True)
             return
         try:
-            await packs_cog.auto_pack_sync()
-            await interaction.followup.send("✅ Pack scan completed.", ephemeral=True)
+            from cogs.packs_cog import _build_scan_result_embed
+            new_series, new_packs = await packs_cog._run_pack_scan()
+            embed = _build_scan_result_embed(new_series, new_packs, triggered_by="manual")
+            await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ Scan error: {e}", ephemeral=True)
 
@@ -166,6 +168,33 @@ class DevPanelView(discord.ui.View):
             return
         await interaction.response.send_modal(RemoveSeriesModal(self.bot))
 
+    @discord.ui.button(label="Cleanup Gimmighoul", style=discord.ButtonStyle.danger, emoji="🧹", row=3)
+    async def cleanup_gimmighoul(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        deleted = 0
+        errors = 0
+        skipped = 0
+        KEEP_PACKS = {"megashine", "shining"}  # gimmighoul is valid in these packs
+        for guild in self.bot.guilds:
+            for channel in guild.text_channels:
+                if "gimmighoul" in channel.name.lower() and channel.category is not None:
+                    cat_name_lower = channel.category.name.lower().replace(" ", "").replace("-", "")
+                    if any(k in cat_name_lower for k in KEEP_PACKS):
+                        skipped += 1
+                        continue
+                    try:
+                        await channel.delete(reason="Gimmighoul cleanup — not relevant for current packs")
+                        deleted += 1
+                        await asyncio.sleep(0.5)
+                    except Exception:
+                        errors += 1
+        await interaction.followup.send(
+            f"🧹 Deleted **{deleted}** gimmighoul channel(s). Skipped **{skipped}** (MegaShine/Shining). Errors: {errors}",
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="Lifetime Stats", style=discord.ButtonStyle.secondary, emoji="🌍", row=3)
     async def lifetime_stats(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction):
@@ -196,7 +225,7 @@ class DevCog(commands.Cog):
         embed.add_field(name="Row 1", value="🔍 Run Pack Scan  •  🔄 Sync Commands", inline=False)
         embed.add_field(name="Row 2", value="📂 Add Series  •  📦 Add Pack", inline=False)
         embed.add_field(name="Row 3", value="🗑️ Remove Pack  •  ❌ Remove Series", inline=False)
-        embed.add_field(name="Row 4", value="🌍 Lifetime Stats (view + post to channel)", inline=False)
+        embed.add_field(name="Row 4", value="🧹 Cleanup Gimmighoul  •  🌍 Lifetime Stats (view + post to channel)", inline=False)
         await interaction.followup.send(embed=embed, view=DevPanelView(self.bot), ephemeral=True)
 
 

@@ -102,6 +102,21 @@ class TradedModal(discord.ui.Modal, title="Mark as Traded - Enter Card Details")
         utils.save_guild_config(self.guild_id, guild_config)
         await utils.update_stats_message(self.guild_id)
 
+        # Auto-mark detection as traded in /trade list by matching message link in embed
+        try:
+            desc = embed.description or ""
+            import re as _re
+            link_match = _re.search(r'https://discord\.com/channels/\S+', desc)
+            if link_match:
+                msg_link = link_match.group(0).rstrip(")")
+                detections = await asyncio.to_thread(utils.load_detections, self.guild_id)
+                for d in detections:
+                    if d.get("message_link") == msg_link and not d.get("traded"):
+                        await asyncio.to_thread(utils.mark_detection_traded, self.guild_id, d["id"])
+                        break
+        except Exception:
+            pass
+
         if "validation_messages" in guild_config and str(self.original_message.id) in guild_config["validation_messages"]:
             del guild_config["validation_messages"][str(self.original_message.id)]
             utils.save_guild_config(self.guild_id, guild_config)

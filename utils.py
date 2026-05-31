@@ -295,6 +295,61 @@ def save_guild_config_sync(guild_id, guild_config):
             print(f"Error saving guild config for {guild_id}: {e}")
 
 
+def get_detections_path(guild_id):
+    return os.path.join(GUILD_CONFIG_DIR, f"guild_{guild_id}_detections.json")
+
+
+def load_detections(guild_id):
+    path = get_detections_path(guild_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def save_detection(guild_id, detection):
+    """Append a detection to guild's detection list (max 500, newest first)."""
+    with config_save_lock:
+        ensure_guild_config_dir()
+        path = get_detections_path(guild_id)
+        detections = load_detections(guild_id)
+        detections.insert(0, detection)
+        if len(detections) > 500:
+            detections = detections[:500]
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(detections, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        except Exception as e:
+            print(f"Error saving detection for {guild_id}: {e}")
+
+
+def mark_detection_traded(guild_id, detection_id):
+    """Mark a detection as traded by ID."""
+    with config_save_lock:
+        path = get_detections_path(guild_id)
+        detections = load_detections(guild_id)
+        for d in detections:
+            if d.get("id") == detection_id:
+                d["traded"] = True
+                break
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(detections, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        except Exception as e:
+            print(f"Error marking detection traded for {guild_id}: {e}")
+
+
 def migrate_configs():
     if not os.path.exists(CONFIG_FILE):
         return
@@ -811,6 +866,23 @@ EMBED_COLORS = {
 
 SAVE4TRADE_KEYWORDS = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "rainbow", "full art", "trainer"]
 
+# Maps rarity text from Better Card Detection mod › lines to canonical keywords.
+# The mod shows "1 Star", "3 Diamond" etc. instead of "one star", "three diamond".
+MOD_RARITY_MAP = {
+    "1 star": "one star",
+    "2 star": "full art",
+    "3 diamond": "three diamond",
+    "4 diamond ex": "four diamond ex",
+    "crown": "crown",
+    "rainbow": "rainbow",
+    "shiny": "shiny",
+    "trainer": "trainer",
+    "immersive": "immersive",
+    "god pack": "god pack",
+    "invalid god pack": "invalid god pack",
+    "gimmighoul": "gimmighoul",
+}
+
 OLD_TO_NEW_CHANNEL_NAMES = {
     "save-4-trade-one-star": "one-star",
     "save-4-trade-three-diamond": "three-diamond",
@@ -962,6 +1034,16 @@ def create_heartbeat_embed(guild_config):
     if "opening" in data:
         opening_str = ", ".join(data["opening"]) if data["opening"] else "None"
         embed.add_field(name="Opening", value=opening_str, inline=False)
+    if "version" in data:
+        v = data["version"]
+        if "mod_version" in data:
+            v += f" / Mod: {data['mod_version']}"
+        embed.add_field(name="Version", value=v, inline=False)
+    if "instances" in data and data["instances"]:
+        lines = []
+        for inst in data["instances"]:
+            lines.append(f"**{inst['name']}** — {inst['packs']} packs | {inst['avg']} p/m | {inst['last_updated']}")
+        embed.add_field(name="Instances", value="\n".join(lines), inline=False)
     last_update_berlin = last_update.astimezone(BERLIN_TZ)
     formatted_time = last_update_berlin.strftime("%d.%m.%Y %H:%M")
     embed.set_footer(text=f"Last updated: {formatted_time}")

@@ -387,6 +387,60 @@ class EventsCog(commands.Cog):
         validation_buttons_enabled = guild_config.get("validation_buttons_enabled", False)
 
         content_lower = message.content.lower()
+        lines = message.content.splitlines()
+
+        # Better Card Detection mod adds card names on lines immediately after › lines.
+        # Build a search content that strips those card name lines to prevent false positives
+        # (e.g. "Iron Crown" triggering "crown"), while keeping all other content intact.
+        # Also extract keywords directly from › rarity lines using MOD_RARITY_MAP.
+        card_name_indices = set()
+        mod_detected_keywords = set()
+        mod_keyword_cards = {}  # keyword → [card_name, ...]
+        _kw_sorted = sorted(utils.CUSTOM_EMBED_TEXT.keys(), key=len, reverse=True)
+
+        for i, line in enumerate(lines):
+            if "›" in line:
+                # Extract text after › and normalize to a keyword
+                after_arrow = line.split("›", 1)[1].strip().lower()
+                after_arrow = re.sub(r'\s*\(x\d+\)', '', after_arrow).strip()
+                after_arrow = re.sub(r'[*_~`]', '', after_arrow).strip()  # strip markdown bold/italic
+                kw = utils.MOD_RARITY_MAP.get(after_arrow)
+                if not kw:
+                    # Fallback: find keyword contained in rarity text (e.g. "shiny 1-star" → "shiny")
+                    kw = next((k for k in _kw_sorted if k in after_arrow), None)
+                if kw:
+                    mod_detected_keywords.add(kw)
+                # Next non-empty line (without ›) contains card name(s), possibly comma-separated
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    next_line_clean = re.sub(r'[*_~`]', '', next_line.strip()).strip()
+                    if next_line_clean and "›" not in next_line_clean:
+                        card_name_indices.add(i + 1)
+                        if kw:
+                            cards = [c.strip() for c in next_line_clean.split(",") if c.strip()]
+                            mod_keyword_cards.setdefault(kw, []).extend(cards)
+
+        if card_name_indices:
+            filtered = [l for i, l in enumerate(lines) if i not in card_name_indices]
+            search_content_lower = "\n".join(filtered).lower()
+        else:
+            search_content_lower = content_lower
+
+        # Extract XML attachment URL if present
+        xml_url = None
+        for att in message.attachments:
+            if att.filename.lower().endswith(".xml") or (att.content_type and "xml" in att.content_type):
+                xml_url = att.url
+                break
+
+        # Detect pack name from message content for /trade grouping
+        _all_config_packs = [p for series_packs in utils.config.get("series", {}).values() for p in series_packs]
+        detected_pack = None
+        for _p in _all_config_packs:
+            if re.search(r'\b' + re.escape(_p.lower()) + r'\b', content_lower):
+                detected_pack = _p.lower()
+                break
+
         KEYWORDS_PRIORITY = list(utils.CUSTOM_EMBED_TEXT.keys())
         processed_keywords = set()
 
@@ -395,7 +449,7 @@ class EventsCog(commands.Cog):
                 continue
             if keyword == "god pack" and "invalid god pack" in content_lower:
                 continue
-            if keyword.lower() not in content_lower:
+            if keyword.lower() not in search_content_lower and keyword.lower() not in mod_detected_keywords:
                 continue
             processed_keywords.add(keyword)
 
@@ -404,12 +458,10 @@ class EventsCog(commands.Cog):
                 if guild_id not in utils.missing_configs:
                     utils.missing_configs[guild_id] = {"packs": set(), "filters": set(), "first_reported": time.time(), "last_notified": 0}
                 utils.missing_configs[guild_id]["filters"].add(keyword)
-                print(f"No filter config found for keyword: {keyword}")
                 continue
 
             target_channel_id = filter_config.get("channel_id")
             source_channel_ids = filter_config.get("source_channel_ids") or guild_config.get("default_source_channel_ids", [])
-
             if source_channel_ids and message.channel.id not in source_channel_ids:
                 continue
 
@@ -417,8 +469,7 @@ class EventsCog(commands.Cog):
             pack_specific_target = None
             if keyword.lower() in utils.SAVE4TRADE_KEYWORDS:
                 pack_specific_categories = guild_config.get("pack_specific_categories", {})
-                all_config_packs = [p for series_packs in utils.config.get("series", {}).values() for p in series_packs]
-                for pack in all_config_packs:
+                for pack in _all_config_packs:
                     if re.search(r'\b' + re.escape(pack.lower()) + r'\b', content_lower):
                         if pack.lower() in pack_specific_categories:
                             pack_category_config = pack_specific_categories[pack.lower()]
@@ -429,8 +480,14 @@ class EventsCog(commands.Cog):
                                     pack_specific_target = pack_specific_channel
                                     break
 
-            target_channel = pack_specific_target if pack_specific_target else self.bot.get_channel(target_channel_id)
-            if not target_channel:
+            default_channel = self.bot.get_channel(target_channel_id)
+            # Always send to default channel; also send to pack-specific if configured and different
+            send_targets = []
+            if default_channel:
+                send_targets.append((default_channel, True))   # (channel, primary=True)
+            if pack_specific_target and pack_specific_target != default_channel:
+                send_targets.append((pack_specific_target, False))  # secondary: no view/pings
+            if not send_targets:
                 continue
 
             custom_text = utils.CUSTOM_EMBED_TEXT.get(keyword, message.content)
@@ -483,12 +540,20 @@ class EventsCog(commands.Cog):
             utils.save_guild_config(guild_id, guild_config)
             utils.PENDING_STATS_GUILDS.add(guild_id)
 
-            try:
-                sent_message = await target_channel.send(embed=embed, view=view)
-            except Exception as e:
-                if utils.DEBUG_PACK_LOGS:
-                    print(f"Error sending embed for keyword '{keyword}' to channel {target_channel_id}: {e}")
+            sent_message = None
+            for target_channel, is_primary in send_targets:
+                try:
+                    msg = await target_channel.send(embed=embed, view=view if is_primary else None)
+                    if is_primary:
+                        sent_message = msg
+                except Exception as e:
+                    if utils.DEBUG_PACK_LOGS:
+                        print(f"Error sending embed for keyword '{keyword}' to channel {target_channel.id}: {e}")
+
+            if sent_message is None:
                 continue
+
+            target_channel = send_targets[0][0]  # primary channel for pings/validation tracking
 
             if isinstance(view, (GodPackValidationView, TradedView)):
                 view.original_message = sent_message
@@ -507,6 +572,22 @@ class EventsCog(commands.Cog):
                 await target_channel.send(f"<@&{invgodpack_ping}>")
             if keyword in ["one star", "three diamond", "four diamond ex", "crown"] and safe_trade_ping:
                 await target_channel.send(f"<@&{safe_trade_ping}>")
+
+            # Save detection(s) for /trade command — one per card name
+            import uuid as _uuid
+            card_names = mod_keyword_cards.get(keyword) or [keyword.title()]
+            for card_name in card_names:
+                detection = {
+                    "id": str(_uuid.uuid4()),
+                    "card_name": card_name,
+                    "rarity": keyword,
+                    "pack": detected_pack,
+                    "message_link": message_link,
+                    "xml_url": xml_url,
+                    "timestamp": time.time(),
+                    "traded": False,
+                }
+                await asyncio.to_thread(utils.save_detection, guild_id, detection)
 
         # Pack filter processing
         processed_packs = set()
@@ -567,9 +648,11 @@ class EventsCog(commands.Cog):
                 time_match = re.search(r"Time: (\d+m)", content)
                 packs_match = re.search(r"Packs: (\d+)", content)
                 avg_match = re.search(r"Avg: ([\d.]+) packs/min", content)
-                version_match = re.search(r"Version: (.*)", content)
+                version_match = re.search(r"(?<!Mod )Version: (.*)", content)
+                mod_version_match = re.search(r"Mod Version: (.*)", content)
                 type_match = re.search(r"Type: (.*)", content)
                 opening_match = re.search(r"Opening: (.*)", content)
+                instance_matches = re.findall(r"^(.+?):\s+Packs:\s+(\d+)\s*\|\s*Avg:\s+([\d.]+)\s+packs/min\s*\|\s*Last updated:\s+(.+)", content, re.MULTILINE)
 
                 heartbeat_data = {}
                 if online_match:
@@ -586,11 +669,18 @@ class EventsCog(commands.Cog):
                     heartbeat_data["avg"] = avg_match.group(1)
                 if version_match:
                     heartbeat_data["version"] = version_match.group(1).strip()
+                if mod_version_match:
+                    heartbeat_data["mod_version"] = mod_version_match.group(1).strip()
                 if type_match:
                     heartbeat_data["type"] = type_match.group(1).strip()
                 if opening_match:
                     opening_str = opening_match.group(1).strip()
                     heartbeat_data["opening"] = [x.strip() for x in opening_str.split(",") if x.strip()]
+                if instance_matches:
+                    heartbeat_data["instances"] = [
+                        {"name": m[0].strip(), "packs": m[1], "avg": m[2], "last_updated": m[3].strip()}
+                        for m in instance_matches
+                    ]
 
                 if heartbeat_data:
                     heartbeat_data["last_update"] = datetime.now(utils.BERLIN_TZ).isoformat()

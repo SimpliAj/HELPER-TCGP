@@ -23,6 +23,7 @@ EXTENSIONS = [
     "cogs.stats_cog",
     "cogs.general_cog",
     "cogs.dev_cog",
+    "cogs.trade_cog",
 ]
 
 async def main():

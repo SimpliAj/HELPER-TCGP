@@ -7,6 +7,28 @@ import utils
 import aiohttp
 
 PACKDATA_URL = "https://raw.githubusercontent.com/kevnITG/PTCGPB/refs/heads/main/Data/packdata.dat"
+PACKDATA_URL_2 = "https://raw.githubusercontent.com/Leanny/PTCGPB/refs/heads/main/Data/packdata.dat"
+
+
+def _build_scan_result_embed(new_series: list[str], new_packs: list[str], triggered_by: str = "manual") -> discord.Embed:
+    if not new_series and not new_packs:
+        embed = discord.Embed(
+            title="🔍 Pack Scan Complete",
+            description="No new packs or series found.",
+            color=discord.Color.green()
+        )
+    else:
+        embed = discord.Embed(
+            title="🆕 New Content Detected",
+            description=f"Found during {'manual scan' if triggered_by == 'manual' else 'auto-sync'}.",
+            color=discord.Color.gold()
+        )
+        if new_series:
+            embed.add_field(name="📂 New Series", value=", ".join(new_series), inline=False)
+        if new_packs:
+            embed.add_field(name="📦 New Packs", value=", ".join(new_packs), inline=False)
+        embed.set_footer(text=f"{len(new_series)} series · {len(new_packs)} packs added")
+    return embed
 
 
 class PacksCog(commands.Cog):
@@ -622,41 +644,74 @@ class PacksCog(commands.Cog):
                     print(f"[AutoSync] Error adding pack to guild {guild_id_str}: {e}")
         return created_count
 
+    async def _fetch_packdata(self, session: aiohttp.ClientSession, url: str) -> str | None:
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    print(f"[AutoSync] {url} returned HTTP {resp.status}")
+                    return None
+                return await resp.text(encoding="utf-8-sig")
+        except Exception as e:
+            print(f"[AutoSync] Failed to fetch {url}: {e}")
+            return None
+
+    def _parse_packdata(self, text: str) -> list[tuple[str, str]]:
+        results = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line.startswith("Pack:"):
+                continue
+            parts = line[5:].split("|")
+            if len(parts) < 2:
+                continue
+            pack_name = parts[0].strip()
+            series_letter = parts[1].strip().upper()
+            results.append((pack_name, series_letter + "-Series"))
+        return results
+
+    async def _run_pack_scan(self) -> tuple[list[str], list[str]]:
+        async with aiohttp.ClientSession() as session:
+            text1, text2 = await asyncio.gather(
+                self._fetch_packdata(session, PACKDATA_URL),
+                self._fetch_packdata(session, PACKDATA_URL_2),
+            )
+
+        if not text1 and not text2:
+            raise RuntimeError("Both packdata.dat sources failed to respond")
+
+        seen = set()
+        entries = []
+        for text in (text1, text2):
+            if not text:
+                continue
+            for pack_name, series_name in self._parse_packdata(text):
+                key = (pack_name.lower(), series_name.lower())
+                if key not in seen:
+                    seen.add(key)
+                    entries.append((pack_name, series_name))
+
+        new_series = []
+        new_packs = []
+
+        for pack_name, series_name in entries:
+            if series_name.lower() not in [s.lower() for s in utils.config["series"]]:
+                count = await self._auto_add_series(series_name)
+                new_series.append(series_name)
+                print(f"[AutoSync] New series '{series_name}' added, created in {count} guilds")
+                await asyncio.sleep(1)
+
+            if pack_name.lower() not in [p.lower() for p in utils.PACKS]:
+                count = await self._auto_add_pack(pack_name, series_name)
+                new_packs.append(pack_name)
+                print(f"[AutoSync] New pack '{pack_name}' ({series_name}) added, created in {count} guilds")
+                await asyncio.sleep(1)
+
+        return new_series, new_packs
+
     @tasks.loop(hours=1)
     async def auto_pack_sync(self):
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(PACKDATA_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
-                        print(f"[AutoSync] Failed to fetch packdata.dat: HTTP {resp.status}")
-                        return
-                    text = await resp.text(encoding="utf-8-sig")
-
-            new_series = []
-            new_packs = []
-
-            for line in text.splitlines():
-                line = line.strip()
-                if not line.startswith("Pack:"):
-                    continue
-                parts = line[5:].split("|")
-                if len(parts) < 2:
-                    continue
-                pack_name = parts[0].strip()
-                series_letter = parts[1].strip().upper()
-                series_name = series_letter + "-Series"
-
-                if series_name.lower() not in [s.lower() for s in utils.config["series"]]:
-                    count = await self._auto_add_series(series_name)
-                    new_series.append(series_name)
-                    print(f"[AutoSync] New series '{series_name}' added, created in {count} guilds")
-                    await asyncio.sleep(1)
-
-                if pack_name.lower() not in [p.lower() for p in utils.PACKS]:
-                    count = await self._auto_add_pack(pack_name, series_name)
-                    new_packs.append(pack_name)
-                    print(f"[AutoSync] New pack '{pack_name}' ({series_name}) added, created in {count} guilds")
-                    await asyncio.sleep(1)
+            new_series, new_packs = await self._run_pack_scan()
 
             if new_series or new_packs:
                 await utils.log_error_to_webhook(
@@ -668,12 +723,8 @@ class PacksCog(commands.Cog):
                     owner_id = utils.config.get("owner_id")
                     if owner_id:
                         owner = await self.bot.fetch_user(int(owner_id))
-                        lines = ["**[Auto-Sync] New content detected:**"]
-                        if new_series:
-                            lines.append("📂 Series: " + ", ".join(new_series))
-                        if new_packs:
-                            lines.append("📦 Packs: " + ", ".join(new_packs))
-                        await owner.send("\n".join(lines))
+                        embed = _build_scan_result_embed(new_series, new_packs, triggered_by="auto")
+                        await owner.send(embed=embed)
                 except Exception as dm_err:
                     print(f"[AutoSync] Failed to DM owner: {dm_err}")
         except Exception as e:
