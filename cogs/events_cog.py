@@ -437,7 +437,7 @@ class EventsCog(commands.Cog):
         _all_config_packs = [p for series_packs in utils.config.get("series", {}).values() for p in series_packs]
         detected_pack = None
         for _p in _all_config_packs:
-            if re.search(r'\b' + re.escape(_p.lower()) + r'\b', content_lower):
+            if re.search(utils.pack_search_pattern(_p), content_lower):
                 detected_pack = _p.lower()
                 break
 
@@ -470,7 +470,7 @@ class EventsCog(commands.Cog):
             if keyword.lower() in utils.SAVE4TRADE_KEYWORDS:
                 pack_specific_categories = guild_config.get("pack_specific_categories", {})
                 for pack in _all_config_packs:
-                    if re.search(r'\b' + re.escape(pack.lower()) + r'\b', content_lower):
+                    if re.search(utils.pack_search_pattern(pack), content_lower):
                         if pack.lower() in pack_specific_categories:
                             pack_category_config = pack_specific_categories[pack.lower()]
                             pack_channel_id = pack_category_config.get("channels", {}).get(keyword.lower())
@@ -594,7 +594,7 @@ class EventsCog(commands.Cog):
         for pack in utils.PACKS:
             if pack in processed_packs:
                 continue
-            if re.search(r'\b' + re.escape(pack.lower()) + r'\b', content_lower):
+            if re.search(utils.pack_search_pattern(pack), content_lower):
                 processed_packs.add(pack)
                 pack_config = pack_channel_map.get(pack.lower())
                 if not pack_config:

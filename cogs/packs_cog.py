@@ -477,7 +477,7 @@ class PacksCog(commands.Cog):
                             if msg.author.bot:
                                 continue
                             message_content = msg.content.lower()
-                            if not re.search(r'\b' + re.escape(content_lower) + r'\b', message_content):
+                            if not re.search(utils.pack_search_pattern(pack), message_content):
                                 continue
                             for keyword in keywords_for_pack:
                                 if keyword.lower() not in message_content:

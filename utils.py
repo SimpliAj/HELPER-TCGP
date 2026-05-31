@@ -870,6 +870,16 @@ EMBED_COLORS = {
 
 SAVE4TRADE_KEYWORDS = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "shiny ex", "rainbow", "full art", "trainer"]
 
+
+def pack_search_pattern(pack_name: str) -> str:
+    """Return a regex pattern matching pack_name in both CamelCase and space-separated forms.
+    'PulsingAura' matches 'pulsingaura' and 'pulsing aura'."""
+    lower = pack_name.lower()
+    spaced = re.sub(r'([A-Z])', r' \1', pack_name).strip().lower()
+    if spaced != lower:
+        return r'\b(?:' + re.escape(lower) + r'|' + re.escape(spaced) + r')\b'
+    return r'\b' + re.escape(lower) + r'\b'
+
 # Maps rarity text from Better Card Detection mod › lines to canonical keywords.
 # The mod shows "1 Star", "3 Diamond" etc. instead of "one star", "three diamond".
 MOD_RARITY_MAP = {
