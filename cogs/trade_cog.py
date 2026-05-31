@@ -8,12 +8,12 @@ from datetime import datetime, timezone
 
 TRADEABLE_RARITIES = {
     "rainbow", "one star", "three diamond", "four diamond ex",
-    "full art", "shiny", "trainer", "gimmighoul",
+    "full art", "shiny", "shiny ex", "trainer", "gimmighoul",
 }
 
 RARITY_EMOJI = {
     "rainbow": "🌈", "crown": "👑", "one star": "⭐", "three diamond": "💎",
-    "four diamond ex": "🔷", "full art": "🎨", "shiny": "✨",
+    "four diamond ex": "🔷", "full art": "🎨", "shiny": "✨", "shiny ex": "💫",
     "trainer": "🎓", "gimmighoul": "🪙", "god pack": "🌟",
 }
 

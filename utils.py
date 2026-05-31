@@ -814,6 +814,7 @@ CUSTOM_EMBED_TEXT = {
     "trainer": "A Trainer card was found!",
     "immersive": "An Immersive card was found!",
     "shiny": "A Shiny card was found!",
+    "shiny ex": "A Shiny EX card was found!",
     "rainbow": "A Rainbow card was found!",
     "full art": "A Two Star Full Art card was found!",
     "gimmighoul": "A Gimmighoul card was found!"
@@ -828,6 +829,7 @@ CUSTOM_AUTHOR_TEXT = {
     "trainer": "Safe 4 Trade",
     "immersive": "None Tradeable",
     "shiny": "Safe 4 Trade",
+    "shiny ex": "Safe 4 Trade",
     "rainbow": "Safe 4 Trade",
     "full art": "Safe 4 Trade",
     "crown": "Gold Card",
@@ -844,6 +846,7 @@ EMBED_THUMBNAILS = {
     "trainer": "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show",
     "immersive": "https://img.game8.co/3995619/a0d611ce374e3070c530ee8d3fd81efa.png/show",
     "shiny": "https://img.game8.co/4137129/6510d1633ee489b2e8fcba939d7e99cb.png/show",
+    "shiny ex": "https://img.game8.co/4137129/6510d1633ee489b2e8fcba939d7e99cb.png/show",
     "rainbow": "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show",
     "full art": "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show",
     "gimmighoul": "https://www.pokemon.com/static-assets/content-assets/cms2/img/pokedex/full/999.png"
@@ -860,11 +863,12 @@ EMBED_COLORS = {
     "rainbow": discord.Color.magenta(),
     "full art": discord.Color.purple(),
     "shiny": discord.Color.orange(),
+    "shiny ex": discord.Color.gold(),
     "immersive": discord.Color.dark_teal(),
     "gimmighoul": discord.Color.dark_gold()
 }
 
-SAVE4TRADE_KEYWORDS = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "rainbow", "full art", "trainer"]
+SAVE4TRADE_KEYWORDS = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "shiny ex", "rainbow", "full art", "trainer"]
 
 # Maps rarity text from Better Card Detection mod › lines to canonical keywords.
 # The mod shows "1 Star", "3 Diamond" etc. instead of "one star", "three diamond".
@@ -875,7 +879,9 @@ MOD_RARITY_MAP = {
     "4 diamond ex": "four diamond ex",
     "crown": "crown",
     "rainbow": "rainbow",
+    "shiny 1-star": "shiny",
     "shiny": "shiny",
+    "shiny 2-star": "shiny ex",
     "trainer": "trainer",
     "immersive": "immersive",
     "god pack": "god pack",
@@ -950,7 +956,7 @@ def create_detailed_stats_embed(guild_config):
     )
     embed.set_thumbnail(url="https://i.imgur.com/cqRCftR.png")
     god_packs = ["god pack", "invalid god pack"]
-    save_for_trade = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "rainbow", "full art", "trainer"]
+    save_for_trade = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "shiny ex", "rainbow", "full art", "trainer"]
     detection = ["crown", "immersive"]
 
     god_pack_list = []
@@ -1132,7 +1138,7 @@ def create_lifetime_stats_embed(active_guild_ids=None):
     )
 
     filter_list = []
-    for keyword in ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "rainbow", "full art", "trainer"]:
+    for keyword in ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "shiny ex", "rainbow", "full art", "trainer"]:
         count = total_filter_stats.get(keyword, 0)
         filter_list.append(f"{keyword.title()}: **{count}**")
     if filter_list:
