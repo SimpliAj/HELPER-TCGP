@@ -685,7 +685,7 @@ class EventsCog(commands.Cog):
                 if heartbeat_data:
                     heartbeat_data["last_update"] = datetime.now(utils.BERLIN_TZ).isoformat()
                     guild_config["heartbeat_data"] = heartbeat_data
-                    utils.save_guild_config(guild_id, guild_config)
+                    await asyncio.to_thread(utils.save_guild_config_sync, guild_id, guild_config)
                     await utils.update_heartbeat_message(guild_id)
 
 

@@ -429,8 +429,11 @@ class PacksCog(commands.Cog):
                     await interaction.followup.send(embed=embed, ephemeral=True)
                     return
 
+            GIMMIGHOUL_PACKS = {"shining", "megashine"}
+            keywords_for_pack = [kw for kw in utils.SAVE4TRADE_KEYWORDS if kw != "gimmighoul" or pack_lower in GIMMIGHOUL_PACKS]
+
             created_channels = []
-            for keyword in utils.SAVE4TRADE_KEYWORDS:
+            for keyword in keywords_for_pack:
                 channel_name = keyword.lower().replace(" ", "-")
                 channel = discord.utils.get(category.text_channels, name=channel_name)
                 if not channel:
@@ -451,7 +454,7 @@ class PacksCog(commands.Cog):
                 guild_config["pack_specific_categories"] = {}
             guild_config["pack_specific_categories"][pack_lower] = {"category_id": category.id, "channels": {}}
 
-            for keyword in utils.SAVE4TRADE_KEYWORDS:
+            for keyword in keywords_for_pack:
                 channel_name = keyword.lower().replace(" ", "-")
                 channel = discord.utils.get(category.text_channels, name=channel_name)
                 if channel:
@@ -476,7 +479,7 @@ class PacksCog(commands.Cog):
                             message_content = msg.content.lower()
                             if not re.search(r'\b' + re.escape(content_lower) + r'\b', message_content):
                                 continue
-                            for keyword in utils.SAVE4TRADE_KEYWORDS:
+                            for keyword in keywords_for_pack:
                                 if keyword.lower() not in message_content:
                                     continue
                                 pack_channel_id = guild_config["pack_specific_categories"][pack_lower]["channels"].get(keyword.lower())
