@@ -454,14 +454,7 @@ class EventsCog(commands.Cog):
             processed_keywords.add(keyword)
 
             filter_config = keyword_channel_map.get(keyword.lower())
-            if not filter_config:
-                if guild_id not in utils.missing_configs:
-                    utils.missing_configs[guild_id] = {"packs": set(), "filters": set(), "first_reported": time.time(), "last_notified": 0}
-                utils.missing_configs[guild_id]["filters"].add(keyword)
-                continue
-
-            target_channel_id = filter_config.get("channel_id")
-            source_channel_ids = filter_config.get("source_channel_ids") or guild_config.get("default_source_channel_ids", [])
+            source_channel_ids = (filter_config.get("source_channel_ids") if filter_config else None) or guild_config.get("default_source_channel_ids", [])
             if source_channel_ids and message.channel.id not in source_channel_ids:
                 continue
 
@@ -480,15 +473,24 @@ class EventsCog(commands.Cog):
                                     pack_specific_target = pack_specific_channel
                                     break
 
-            default_channel = self.bot.get_channel(target_channel_id)
-            # Always send to default channel; also send to pack-specific if configured and different
-            send_targets = []
-            if default_channel:
-                send_targets.append((default_channel, True))   # (channel, primary=True)
-            if pack_specific_target and pack_specific_target != default_channel:
-                send_targets.append((pack_specific_target, False))  # secondary: no view/pings
-            if not send_targets:
-                continue
+            if not filter_config:
+                if pack_specific_target is None:
+                    if guild_id not in utils.missing_configs:
+                        utils.missing_configs[guild_id] = {"packs": set(), "filters": set(), "first_reported": time.time(), "last_notified": 0}
+                    utils.missing_configs[guild_id]["filters"].add(keyword)
+                    continue
+                # No default channel but pack-specific exists — send only there (as primary)
+                send_targets = [(pack_specific_target, True)]
+            else:
+                target_channel_id = filter_config.get("channel_id")
+                default_channel = self.bot.get_channel(target_channel_id)
+                send_targets = []
+                if default_channel:
+                    send_targets.append((default_channel, True))
+                if pack_specific_target and pack_specific_target != default_channel:
+                    send_targets.append((pack_specific_target, False))
+                if not send_targets:
+                    continue
 
             custom_text = utils.CUSTOM_EMBED_TEXT.get(keyword, message.content)
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
