@@ -197,6 +197,7 @@ class EventsCog(commands.Cog):
                 print(f"Error restoring heartbeat message {message_id}: {e}")
 
         asyncio.create_task(self._heartbeat_monitor())
+        asyncio.create_task(self._repair_pack_categories())
 
     async def _auto_cleanup_task(self):
         await self.bot.wait_until_ready()
@@ -332,6 +333,40 @@ class EventsCog(commands.Cog):
                 break
             except Exception as e:
                 print(f"❌ Error in stats batch update task: {e}")
+
+    async def _repair_pack_categories(self):
+        """Auto-register pack_specific_categories from existing 'Pack - Save 4 Trade' Discord categories."""
+        await self.bot.wait_until_ready()
+        _all_packs = [p for series_packs in utils.config.get("series", {}).values() for p in series_packs]
+        repaired = 0
+        for guild in self.bot.guilds:
+            guild_id = str(guild.id)
+            guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id)
+            if "pack_specific_categories" not in guild_config:
+                guild_config["pack_specific_categories"] = {}
+            changed = False
+            for pack in _all_packs:
+                pack_lower = pack.lower()
+                category_name = f"{pack.title()} - Save 4 Trade"
+                category = discord.utils.get(guild.categories, name=category_name)
+                if category and pack_lower not in guild_config["pack_specific_categories"]:
+                    channels_map = {}
+                    for keyword in utils.SAVE4TRADE_KEYWORDS:
+                        ch_name = keyword.lower().replace(" ", "-")
+                        ch = discord.utils.get(category.text_channels, name=ch_name)
+                        if ch:
+                            channels_map[keyword] = ch.id
+                    if channels_map:
+                        guild_config["pack_specific_categories"][pack_lower] = {
+                            "category_id": category.id,
+                            "channels": channels_map,
+                        }
+                        changed = True
+                        repaired += 1
+            if changed:
+                await asyncio.to_thread(utils.save_guild_config_sync, guild_id, guild_config)
+        if repaired:
+            print(f"✅ [REPAIR] Auto-registered {repaired} pack category/categories across guilds")
 
     async def _heartbeat_monitor(self):
         while True:

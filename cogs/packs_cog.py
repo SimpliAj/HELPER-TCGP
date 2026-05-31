@@ -474,7 +474,7 @@ class PacksCog(commands.Cog):
                         continue
                     try:
                         async for msg in source_channel.history(limit=100):
-                            if msg.author.bot:
+                            if msg.author == interaction.client.user:
                                 continue
                             message_content = msg.content.lower()
                             if not re.search(utils.pack_search_pattern(pack), message_content):
