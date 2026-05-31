@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import re
 import utils
 
 
@@ -52,7 +51,7 @@ class ModeView(discord.ui.View):
             description="Pack channels finalized. Select validator role next.",
             color=discord.Color.green()
         )
-        val_view = ValidatorView(self.original_user, self.guild_id, interaction.guild)
+        val_view = ValidatorView(self.original_user, self.guild_id)
         await interaction.followup.send(embed=val_embed, view=val_view)
         self.stop()
 
@@ -93,183 +92,186 @@ class ModeView(discord.ui.View):
             description=f"Created {created_in_mode} individual pack channels. Select validator role next.",
             color=discord.Color.green()
         )
-        val_view = ValidatorView(self.original_user, self.guild_id, interaction.guild)
+        val_view = ValidatorView(self.original_user, self.guild_id)
         await interaction.followup.send(embed=val_embed, view=val_view)
         self.stop()
 
 
 class ValidatorView(discord.ui.View):
-    def __init__(self, original_user, guild_id, guild):
+    def __init__(self, original_user, guild_id):
         super().__init__(timeout=300)
         self.original_user = original_user
         self.guild_id = guild_id
-        self.guild = guild
-        roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)[:25]
-        if guild.default_role in roles:
-            roles.remove(guild.default_role)
-        self.select = discord.ui.Select(
-            placeholder="Select Validator Role...",
-            options=[discord.SelectOption(label=role.name, value=str(role.id)) for role in roles]
-        )
-        self.select.callback = self.role_callback
-        self.add_item(self.select)
 
-    async def role_callback(self, inter: discord.Interaction):
-        if inter.user != self.original_user:
-            await inter.response.send_message("Only the command issuer can proceed.", ephemeral=True)
+    @discord.ui.select(
+        cls=discord.ui.RoleSelect,
+        placeholder="Select Validator Role...",
+        min_values=1, max_values=1,
+        row=0,
+    )
+    async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        if interaction.user != self.original_user:
+            await interaction.response.defer()
             return
-        role_id = int(self.select.values[0])
-        guild_config = utils.load_guild_config(self.guild_id)
-        guild_config["validator_role_id"] = role_id
-        utils.save_guild_config(self.guild_id, guild_config)
-        ping_embed = discord.Embed(
-            title="Step 3: Optional Ping Roles",
-            description="Select which ping roles to configure (optional). You can skip and set them later with /setpingroles.",
-            color=discord.Color.green()
+        role = select.values[0]
+        gc = utils.load_guild_config(self.guild_id)
+        gc["validator_role_id"] = role.id
+        utils.save_guild_config(self.guild_id, gc)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="Step 3: Optional Ping Roles",
+                description=f"✅ Validator role set to {role.mention}\n\nNow configure ping roles (optional). Skip to set later with /configure.",
+                color=discord.Color.green(),
+            ),
+            view=PingSetupView(self.original_user, self.guild_id),
         )
-        ping_view = PingSetupView(self.original_user, self.guild_id, inter.guild)
-        await inter.response.send_message(embed=ping_embed, view=ping_view, ephemeral=True)
-        self.stop()
+
+
+_PING_LABELS = {"godpack": "God Pack", "invgodpack": "Invalid God Pack", "safe_trade": "Safe for Trade"}
 
 
 class PingSetupView(discord.ui.View):
-    def __init__(self, original_user, guild_id, guild):
+    def __init__(self, original_user, guild_id):
         super().__init__(timeout=300)
         self.original_user = original_user
         self.guild_id = guild_id
-        self.guild = guild
-        self.ping_labels = {"godpack": "God Pack Ping", "invgodpack": "Invalid God Pack Ping", "safe_trade": "Safe for Trade Ping"}
 
-    @discord.ui.button(label="Set God Pack Ping", style=discord.ButtonStyle.primary)
+    def _ping_embed(self) -> discord.Embed:
+        gc = utils.load_guild_config(self.guild_id)
+        lines = []
+        for key, label in _PING_LABELS.items():
+            rid = gc.get(f"{key}_ping")
+            lines.append(f"**{label}:** {'<@&' + str(rid) + '>' if rid else '*not set*'}")
+        return discord.Embed(
+            title="Step 3: Ping Roles (Optional)",
+            description="\n".join(lines) + "\n\nSet each ping role or click **Continue** when done.",
+            color=discord.Color.green(),
+        )
+
+    @discord.ui.button(label="God Pack Ping", style=discord.ButtonStyle.primary, row=0)
     async def godpack_ping(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.original_user:
             await interaction.response.defer()
             return
-        await interaction.response.defer(ephemeral=True)
-        await self.set_ping_role(interaction, "godpack")
+        await self._show_role_picker(interaction, "godpack")
 
-    @discord.ui.button(label="Set Invalid God Pack Ping", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Invalid God Pack Ping", style=discord.ButtonStyle.primary, row=0)
     async def invgodpack_ping(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.original_user:
             await interaction.response.defer()
             return
-        await interaction.response.defer(ephemeral=True)
-        await self.set_ping_role(interaction, "invgodpack")
+        await self._show_role_picker(interaction, "invgodpack")
 
-    @discord.ui.button(label="Set Safe for Trade Ping", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Safe for Trade Ping", style=discord.ButtonStyle.primary, row=1)
     async def safe_trade_ping(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.original_user:
             await interaction.response.defer()
             return
-        await interaction.response.defer(ephemeral=True)
-        await self.set_ping_role(interaction, "safe_trade")
+        await self._show_role_picker(interaction, "safe_trade")
 
-    @discord.ui.button(label="Skip Pings", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Continue →", style=discord.ButtonStyle.secondary, row=1)
     async def skip_pings(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.original_user:
             await interaction.response.defer()
             return
         await self.proceed_to_next_step(interaction)
 
-    async def set_ping_role(self, interaction: discord.Interaction, ping_type: str):
-        roles = sorted(self.guild.roles, key=lambda r: r.position, reverse=True)[:25]
-        if self.guild.default_role in roles:
-            roles.remove(self.guild.default_role)
+    async def _show_role_picker(self, interaction: discord.Interaction, ping_type: str):
+        guild_id = self.guild_id
+        original_user = self.original_user
+        parent = self
 
-        class PingSelectView(discord.ui.View):
-            def __init__(self, parent):
+        class PingRoleView(discord.ui.View):
+            def __init__(self):
                 super().__init__(timeout=300)
-                self.parent = parent
 
-            @discord.ui.select(placeholder="Select Ping Role...")
-            async def role_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-                if interaction.user != self.parent.original_user:
+            @discord.ui.select(
+                cls=discord.ui.RoleSelect,
+                placeholder=f"Select role for {_PING_LABELS[ping_type]} ping...",
+                min_values=1, max_values=1,
+                row=0,
+            )
+            async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+                if interaction.user != original_user:
                     await interaction.response.defer()
                     return
-                await self.parent.ping_callback(interaction, ping_type, int(select.values[0]))
+                gc = utils.load_guild_config(guild_id)
+                gc[f"{ping_type}_ping"] = select.values[0].id
+                utils.save_guild_config(guild_id, gc)
+                await interaction.response.edit_message(embed=parent._ping_embed(), view=parent)
 
-        view = PingSelectView(self)
-        options = [discord.SelectOption(label=role.name, value=str(role.id)) for role in roles]
-        view.role_select.options = options
-        await interaction.followup.send(f"Select the role for {self.ping_labels[ping_type]}:", view=view, ephemeral=True)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title=f"🔔 {_PING_LABELS[ping_type]} Ping",
+                description="Select a role to ping when this event occurs.",
+                color=discord.Color.blue(),
+            ),
+            view=PingRoleView(),
+        )
 
-    async def ping_callback(self, interaction: discord.Interaction, ping_type: str, role_id: int):
+    async def proceed_to_next_step(self, interaction: discord.Interaction):
+        view = SetupSourceView(self.guild_id, self.original_user)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="Step 3: Source Channels (Optional)",
+                description="Select which channels the bot should listen to for card detection.\nLeave empty and click **Skip** to listen to all channels.",
+                color=discord.Color.blue(),
+            ),
+            view=view,
+        )
+
+
+class SetupSourceView(discord.ui.View):
+    def __init__(self, guild_id: str, original_user):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.original_user = original_user
+        self.source_ids = []
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="Select source channel(s)...",
+        min_values=1, max_values=25,
+        channel_types=[discord.ChannelType.text],
+        row=0,
+    )
+    async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
         if interaction.user != self.original_user:
             await interaction.response.defer()
             return
-        guild_config = utils.load_guild_config(self.guild_id)
-        guild_config[f"{ping_type}_ping"] = role_id
-        utils.save_guild_config(self.guild_id, guild_config)
+        self.source_ids = [ch.id for ch in select.values]
         await interaction.response.defer()
-        await interaction.followup.send(f"✅ {self.ping_labels[ping_type]} set to <@&{role_id}>", ephemeral=True)
 
-    async def proceed_to_next_step(self, interaction: discord.Interaction):
-        modal = SourceModal()
-        modal.guild_id = self.guild_id
-        modal.original_user = self.original_user
-        await interaction.response.send_modal(modal)
-
-
-class SourceModal(discord.ui.Modal, title="Set Source Channels (Optional)"):
-    source_input = discord.ui.TextInput(
-        label="Source Channels",
-        style=discord.TextStyle.short,
-        placeholder="Mention multiple channels, e.g., #general #tcg-chat (leave empty for all channels)",
-        required=False,
-        max_length=500
-    )
-
-    def __init__(self):
-        super().__init__()
-        self.guild_id = None
-        self.original_user = None
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        if not self.original_user:
-            await interaction.followup.send("❌ Setup error: Original user not set. Please restart /setup.", ephemeral=True)
+    @discord.ui.button(label="✅ Save & Continue", style=discord.ButtonStyle.success, row=1)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.original_user:
+            await interaction.response.defer()
             return
+        await self._apply(interaction, self.source_ids)
 
-        source_ids = []
-        input_value = self.source_input.value.strip()
-        if input_value:
-            matches = re.findall(r'<#(\d+)>', input_value)
-            for match in matches:
-                try:
-                    ch_id = int(match)
-                    if interaction.guild.get_channel(ch_id):
-                        source_ids.append(ch_id)
-                except ValueError:
-                    pass
-            if not source_ids:
-                channel_names = [name.strip().strip('#').strip().lower() for name in input_value.split(',') if name.strip()]
-                for name in channel_names:
-                    for ch in interaction.guild.text_channels:
-                        if ch.name.lower() == name:
-                            source_ids.append(ch.id)
-                            break
+    @discord.ui.button(label="Skip (All Channels)", style=discord.ButtonStyle.secondary, row=1)
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.original_user:
+            await interaction.response.defer()
+            return
+        await self._apply(interaction, [])
 
-        guild_config = utils.load_guild_config(self.guild_id)
-        guild_config["default_source_channel_ids"] = source_ids
-        if "keyword_channel_map" in guild_config:
-            for kw, cfg in guild_config["keyword_channel_map"].items():
-                cfg["source_channel_ids"] = source_ids[:]
-        if "pack_channel_map" in guild_config:
-            for pack, cfg in guild_config["pack_channel_map"].items():
-                cfg["source_channel_ids"] = source_ids[:]
-        utils.save_guild_config(self.guild_id, guild_config)
-
-        val_embed = discord.Embed(
-            title="Step 4: Validation Buttons",
-            description="Do you want to enable traded buttons for Safe 4 Trade embeds?",
-            color=discord.Color.green()
+    async def _apply(self, interaction: discord.Interaction, source_ids: list):
+        gc = utils.load_guild_config(self.guild_id)
+        gc["default_source_channel_ids"] = source_ids
+        for cfg in gc.get("keyword_channel_map", {}).values():
+            cfg["source_channel_ids"] = source_ids[:]
+        for cfg in gc.get("pack_channel_map", {}).values():
+            cfg["source_channel_ids"] = source_ids[:]
+        utils.save_guild_config(self.guild_id, gc)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="Step 4: Validation Buttons",
+                description="Do you want to enable traded buttons for Safe 4 Trade embeds?",
+                color=discord.Color.green(),
+            ),
+            view=ValidationSetupView(self.original_user, self.guild_id, interaction.guild),
         )
-        val_view = ValidationSetupView(self.original_user, self.guild_id, interaction.guild)
-        await interaction.followup.send(embed=val_embed, view=val_view, ephemeral=True)
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        print(f"Source modal error: {error}")
-        await interaction.followup.send("An error occurred during source setup.", ephemeral=True)
 
 
 class ValidationSetupView(discord.ui.View):
@@ -326,58 +328,73 @@ class HeartbeatSetupView(discord.ui.View):
         if interaction.user != self.original_user:
             await interaction.response.defer()
             return
-        await interaction.response.defer(ephemeral=True)
+        original_user = self.original_user
+        guild_id = self.guild_id
+        parent = self
 
-        class ChannelSelectView(discord.ui.View):
-            def __init__(self, parent):
+        class HeartbeatSetupView(discord.ui.View):
+            def __init__(self):
                 super().__init__(timeout=300)
-                self.parent = parent
-                self.source_id = None
+                self.source_ids = []
+                self.target_id = None
 
-            @discord.ui.select(placeholder="Select Source Channel...", min_values=1, max_values=1)
-            async def source_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-                if interaction.user != self.parent.original_user:
+            @discord.ui.select(
+                cls=discord.ui.ChannelSelect,
+                placeholder="1. Source channel(s) — where heartbeat bot posts",
+                min_values=1, max_values=10,
+                channel_types=[discord.ChannelType.text],
+                row=0,
+            )
+            async def source_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+                if interaction.user != original_user:
                     await interaction.response.defer()
                     return
-                self.source_id = int(select.values[0])
+                self.source_ids = [ch.id for ch in select.values]
                 await interaction.response.defer()
-                await interaction.followup.send(f"✅ Source set to <#{self.source_id}>", ephemeral=True)
 
-                class TargetSelectView(discord.ui.View):
-                    def __init__(self, source_id, parent):
-                        super().__init__(timeout=300)
-                        self.source_id = source_id
-                        self.parent = parent
+            @discord.ui.select(
+                cls=discord.ui.ChannelSelect,
+                placeholder="2. Target channel — heartbeat embed posted here",
+                min_values=1, max_values=1,
+                channel_types=[discord.ChannelType.text],
+                row=1,
+            )
+            async def target_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+                if interaction.user != original_user:
+                    await interaction.response.defer()
+                    return
+                self.target_id = select.values[0].id
+                await interaction.response.defer()
 
-                    @discord.ui.select(placeholder="Select Target Channel...", min_values=1, max_values=1)
-                    async def target_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-                        if interaction.user != self.parent.original_user:
-                            await interaction.response.defer()
-                            return
-                        target_id = int(select.values[0])
-                        guild_config = utils.load_guild_config(self.parent.guild_id)
-                        guild_config["heartbeat_source_channel_id"] = self.source_id
-                        guild_config["heartbeat_target_channel_id"] = target_id
-                        embed = utils.create_heartbeat_embed(guild_config)
-                        target_channel = self.parent.guild.get_channel(target_id)
-                        sent_message = await target_channel.send(embed=embed)
-                        guild_config["heartbeat_message_id"] = sent_message.id
-                        utils.save_guild_config(self.parent.guild_id, guild_config)
-                        await interaction.response.defer()
-                        await interaction.followup.send(f"✅ Heartbeat configured. Target: <#{target_id}>", ephemeral=True)
-                        final_embed = self.parent.build_final_embed(self.parent.guild)
-                        await interaction.followup.send(embed=final_embed, ephemeral=True)
-                        self.parent.stop()
+            @discord.ui.button(label="✅ Save Heartbeat", style=discord.ButtonStyle.success, row=2)
+            async def confirm(self, interaction: discord.Interaction, btn: discord.ui.Button):
+                if interaction.user != original_user:
+                    await interaction.response.defer()
+                    return
+                if not self.source_ids or not self.target_id:
+                    await interaction.response.send_message("❌ Select source and target channels first.", ephemeral=True)
+                    return
+                gc = utils.load_guild_config(guild_id)
+                gc["heartbeat_source_channel_ids"] = self.source_ids
+                gc["heartbeat_source_channel_id"] = self.source_ids[0]
+                gc["heartbeat_target_channel_id"] = self.target_id
+                embed = utils.create_heartbeat_embed(gc)
+                target_ch = interaction.guild.get_channel(self.target_id)
+                sent = await target_ch.send(embed=embed)
+                gc["heartbeat_message_id"] = sent.id
+                utils.save_guild_config(guild_id, gc)
+                final_embed = parent.build_final_embed(interaction.guild)
+                await interaction.response.edit_message(embed=final_embed, view=None)
+                parent.stop()
 
-                target_view = TargetSelectView(self.source_id, self.parent)
-                target_channels = [discord.SelectOption(label=ch.name, value=str(ch.id)) for ch in self.parent.guild.text_channels[:25]]
-                target_view.target_select.options = target_channels
-                await interaction.followup.send("Select target channel for heartbeat:", view=target_view, ephemeral=True)
-
-        view = ChannelSelectView(self)
-        channels = [discord.SelectOption(label=ch.name, value=str(ch.id)) for ch in interaction.guild.text_channels[:25]]
-        view.source_select.options = channels
-        await interaction.followup.send("Select source channel for heartbeat:", view=view, ephemeral=True)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="Step 5: Heartbeat",
+                description="Select the source channel(s) where the heartbeat bot posts, then the target channel for the embed.",
+                color=discord.Color.blue(),
+            ),
+            view=HeartbeatSetupView(),
+        )
 
     @discord.ui.button(label="Disable Heartbeat", style=discord.ButtonStyle.danger)
     async def disable_heartbeat(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -496,15 +513,24 @@ class SetupCog(commands.Cog):
                         "B-Series": {"series": "B-Series", "channel_name": "b-series"}
                     }
 
+                    _role_ids = guild_config.get("pack_category_view_roles", [])
+                    _roles = [r for rid in _role_ids if (r := guild.get_role(rid))]
+
+                    def _setup_ow():
+                        ow = {guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)}
+                        if _roles:
+                            ow[guild.default_role] = discord.PermissionOverwrite(view_channel=False)
+                            for role in _roles:
+                                ow[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
+                        else:
+                            ow[guild.default_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+                        return ow
+
                     created_channels = {}
                     for cat_name, cfg in category_configs.items():
-                        overwrites = {
-                            guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                        }
                         category = discord.utils.get(guild.categories, name=cat_name)
                         if not category:
-                            category = await guild.create_category(cat_name, overwrites=overwrites)
+                            category = await guild.create_category(cat_name, overwrites=_setup_ow())
                         created_channels[cat_name] = category
 
                     keyword_channel_map = {}
@@ -518,11 +544,7 @@ class SetupCog(commands.Cog):
                                 channel_name = utils.OLD_TO_NEW_CHANNEL_NAMES.get(old_channel_name, clean_name)
                                 existing_channel = discord.utils.get(category.text_channels, name=channel_name)
                                 if not existing_channel:
-                                    overwrites = {
-                                        guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                                        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                                    }
-                                    existing_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
+                                    existing_channel = await category.create_text_channel(channel_name, overwrites=_setup_ow())
                                     created_keyword_channels += 1
                                 old_channel = discord.utils.get(category.text_channels, name=old_channel_name)
                                 if old_channel:

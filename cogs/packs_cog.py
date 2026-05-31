@@ -413,13 +413,23 @@ class PacksCog(commands.Cog):
 
             category_name = f"{pack.title()} - Save 4 Trade"
             category = discord.utils.get(guild.categories, name=category_name)
+
+            pack_role_ids = guild_config.get("pack_category_view_roles", [])
+            pack_roles = [r for rid in pack_role_ids if (r := guild.get_role(rid))]
+
+            def _build_overwrites(send_ok=True):
+                ow = {guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)}
+                if pack_roles:
+                    ow[guild.default_role] = discord.PermissionOverwrite(view_channel=False)
+                    for role in pack_roles:
+                        ow[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
+                else:
+                    ow[guild.default_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True if send_ok else False)
+                return ow
+
             if not category:
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                    guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                }
                 try:
-                    category = await guild.create_category(category_name, overwrites=overwrites)
+                    category = await guild.create_category(category_name, overwrites=_build_overwrites())
                 except discord.Forbidden:
                     embed = discord.Embed(title="Error", description="Bot lacks permissions to create categories. Please grant **Manage Channels** permission.", color=discord.Color.red())
                     await interaction.followup.send(embed=embed, ephemeral=True)
@@ -437,12 +447,8 @@ class PacksCog(commands.Cog):
                 channel_name = keyword.lower().replace(" ", "-")
                 channel = discord.utils.get(category.text_channels, name=channel_name)
                 if not channel:
-                    overwrites = {
-                        guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                    }
                     try:
-                        channel = await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
+                        channel = await guild.create_text_channel(channel_name, category=category, overwrites=_build_overwrites())
                         created_channels.append(channel.mention)
                     except Exception as e:
                         print(f"Error creating channel {channel_name}: {e}")

@@ -677,7 +677,12 @@ class EventsCog(commands.Cog):
                         print(f"Error sending embed for pack '{pack}' to channel {target_channel_id}: {e}")
 
         # Heartbeat processing
-        if "heartbeat_source_channel_id" in guild_config and guild_config["heartbeat_source_channel_id"] == message.channel.id:
+        heartbeat_source_ids = guild_config.get("heartbeat_source_channel_ids") or []
+        if not heartbeat_source_ids:
+            _sid = guild_config.get("heartbeat_source_channel_id")
+            if _sid:
+                heartbeat_source_ids = [_sid]
+        if heartbeat_source_ids and message.channel.id in heartbeat_source_ids:
             if message.content.startswith("Bot"):
                 content = message.content
                 online_match = re.search(r"Online: (.*)", content)

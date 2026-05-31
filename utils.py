@@ -947,13 +947,13 @@ def create_stats_embed(guild_config):
         value=f"Total: {godpacks['total']}\nValid: {godpacks['valid']}\nInvalid: {godpacks['invalid']}",
         inline=False
     )
-    if validation_buttons_enabled:
-        general = stats['general']
-        embed.add_field(
-            name="Safe 4 Trade",
-            value=f"Total: {general['total']}\nTraded: {general['valid']}",
-            inline=False
-        )
+    general = stats.get('general', {'total': 0, 'valid': 0})
+    available = general['total'] - general['valid']
+    embed.add_field(
+        name="Safe 4 Trade",
+        value=f"Total: {general['total']}\nTraded: {general['valid']}\nAvailable: {available}",
+        inline=False
+    )
     return embed
 
 

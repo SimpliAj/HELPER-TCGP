@@ -7,117 +7,235 @@ import utils
 
 # ── Modals ────────────────────────────────────────────────────────────────────
 
-class HeartbeatModal(discord.ui.Modal, title="Set Heartbeat Channels"):
-    source = discord.ui.TextInput(label="Source Channel", placeholder="#channel or channel ID", min_length=2, max_length=100)
-    target = discord.ui.TextInput(label="Target Channel", placeholder="#channel or channel ID", min_length=2, max_length=100)
+class HeartbeatConfigView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.source_ids = []
+        self.target_id = None
 
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        def resolve_channel(value: str):
-            value = value.strip()
-            match = re.search(r'(\d{17,20})', value)
-            if match:
-                return interaction.guild.get_channel(int(match.group(1)))
-            name = value.lstrip('#').lower()
-            return discord.utils.get(interaction.guild.text_channels, name=name)
-
-        source_ch = resolve_channel(self.source.value)
-        target_ch = resolve_channel(self.target.value)
-
-        if not source_ch or not target_ch:
-            await interaction.followup.send("❌ Could not find one or both channels. Use #mention or channel ID.", ephemeral=True)
-            return
-
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config["heartbeat_source_channel_id"] = source_ch.id
-        guild_config["heartbeat_target_channel_id"] = target_ch.id
-        embed = utils.create_heartbeat_embed(guild_config)
-        sent_message = await target_ch.send(embed=embed)
-        guild_config["heartbeat_message_id"] = sent_message.id
-        utils.save_guild_config(guild_id, guild_config)
-
-        await interaction.followup.send(
-            embed=discord.Embed(title="✅ Heartbeat Configured",
-                                description=f"Source: {source_ch.mention} → Stats in {target_ch.mention}.",
-                                color=discord.Color.green()),
-            ephemeral=True
-        )
-
-
-class ValidatorRoleModal(discord.ui.Modal, title="Set Validator Role"):
-    role_input = discord.ui.TextInput(label="Role", placeholder="@RoleName or role ID", min_length=1, max_length=100)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        value = self.role_input.value.strip()
-        match = re.search(r'(\d{17,20})', value)
-        role = None
-        if match:
-            role = interaction.guild.get_role(int(match.group(1)))
-        if not role:
-            name = value.lstrip('@').lower()
-            role = discord.utils.get(interaction.guild.roles, name=name)
-        if not role:
-            await interaction.followup.send("❌ Role not found. Use @mention or role ID.", ephemeral=True)
-            return
-        guild_id = str(interaction.guild.id)
-        guild_config = utils.load_guild_config(guild_id)
-        guild_config["validator_role_id"] = role.id
-        utils.save_guild_config(guild_id, guild_config)
-        await interaction.followup.send(
-            embed=discord.Embed(title="✅ Validator Role Set", description=f"Set to {role.mention}.", color=discord.Color.green()),
-            ephemeral=True
-        )
-
-
-class SourceModal(discord.ui.Modal, title="Set Source Channels"):
-    source_input = discord.ui.TextInput(
-        label="Source Channels",
-        style=discord.TextStyle.short,
-        placeholder="Mention channels e.g. #general #tcg-chat (leave empty for all)",
-        required=False,
-        max_length=500
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="1. Source channel(s) — bot reads heartbeat here",
+        min_values=1, max_values=10,
+        channel_types=[discord.ChannelType.text],
+        row=0,
     )
+    async def source_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.source_ids = [ch.id for ch in select.values]
+        await interaction.response.defer()
 
-    def __init__(self):
-        super().__init__()
-        self.guild_id = None
-        self.original_user = None
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="2. Target channel — heartbeat embed posted here",
+        min_values=1, max_values=1,
+        channel_types=[discord.ChannelType.text],
+        row=1,
+    )
+    async def target_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.target_id = select.values[0].id
+        await interaction.response.defer()
 
-    async def on_submit(self, interaction: discord.Interaction):
+    @discord.ui.button(label="✅ Save Heartbeat", style=discord.ButtonStyle.success, row=2)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.source_ids or not self.target_id:
+            await interaction.response.send_message("❌ Select source and target channels first.", ephemeral=True)
+            return
+        gc = utils.load_guild_config(self.guild_id)
+        gc["heartbeat_source_channel_ids"] = self.source_ids
+        gc["heartbeat_source_channel_id"] = self.source_ids[0]
+        gc["heartbeat_target_channel_id"] = self.target_id
+        embed = utils.create_heartbeat_embed(gc)
+        target_ch = interaction.guild.get_channel(self.target_id)
+        sent = await target_ch.send(embed=embed)
+        gc["heartbeat_message_id"] = sent.id
+        utils.save_guild_config(self.guild_id, gc)
+        sources = ", ".join(f"<#{sid}>" for sid in self.source_ids)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="✅ Heartbeat Configured",
+                description=f"**Sources:** {sources}\n**Target:** <#{self.target_id}>",
+                color=discord.Color.green(),
+            ),
+            view=None,
+        )
+
+
+class ValidatorRoleView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+
+    @discord.ui.select(
+        cls=discord.ui.RoleSelect,
+        placeholder="Select the validator role...",
+        min_values=1, max_values=1,
+        row=0,
+    )
+    async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        role = select.values[0]
+        gc = utils.load_guild_config(self.guild_id)
+        gc["validator_role_id"] = role.id
+        utils.save_guild_config(self.guild_id, gc)
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="✅ Validator Role Set", description=f"Set to {role.mention}.", color=discord.Color.green()),
+            view=None,
+        )
+
+
+class SourceChannelView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.source_ids = []
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="Select source channel(s)...",
+        min_values=1, max_values=25,
+        channel_types=[discord.ChannelType.text],
+        row=0,
+    )
+    async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.source_ids = [ch.id for ch in select.values]
+        await interaction.response.defer()
+
+    @discord.ui.button(label="✅ Save Sources", style=discord.ButtonStyle.success, row=1)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        gc = utils.load_guild_config(self.guild_id)
+        gc["default_source_channel_ids"] = self.source_ids
+        for cfg in gc.get("keyword_channel_map", {}).values():
+            cfg["source_channel_ids"] = self.source_ids[:]
+        for cfg in gc.get("pack_channel_map", {}).values():
+            cfg["source_channel_ids"] = self.source_ids[:]
+        utils.save_guild_config(self.guild_id, gc)
+        mentions = ", ".join(f"<#{sid}>" for sid in self.source_ids) if self.source_ids else "All channels"
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="✅ Sources Updated", description=f"Source channels: {mentions}", color=discord.Color.green()),
+            view=None,
+        )
+
+    @discord.ui.button(label="Reset (All Channels)", style=discord.ButtonStyle.danger, row=1)
+    async def reset(self, interaction: discord.Interaction, button: discord.ui.Button):
+        gc = utils.load_guild_config(self.guild_id)
+        gc["default_source_channel_ids"] = []
+        for cfg in gc.get("keyword_channel_map", {}).values():
+            cfg["source_channel_ids"] = []
+        for cfg in gc.get("pack_channel_map", {}).values():
+            cfg["source_channel_ids"] = []
+        utils.save_guild_config(self.guild_id, gc)
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="✅ Sources Reset", description="Listening to all channels.", color=discord.Color.green()),
+            view=None,
+        )
+
+
+# ── Pack Role View ────────────────────────────────────────────────────────────
+
+def _bot_category_names() -> set:
+    """All category names the bot manages (setup categories + series names)."""
+    fixed = {"Save 4 Trade", "God Packs", "Detection"}
+    series = set(utils.config.get("series", {}).keys())
+    return fixed | series
+
+
+def _is_bot_category(cat: discord.CategoryChannel) -> bool:
+    return cat.name.endswith(" - Save 4 Trade") or cat.name in _bot_category_names()
+
+
+class PackRoleView(discord.ui.View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.role_ids = []
+
+    @discord.ui.select(
+        cls=discord.ui.RoleSelect,
+        placeholder="Select roles that can access bot channels...",
+        min_values=0, max_values=10,
+        row=0,
+    )
+    async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        self.role_ids = [r.id for r in select.values]
+        await interaction.response.defer()
+
+    @discord.ui.button(label="✅ Save Roles", style=discord.ButtonStyle.success, row=1)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        source_ids = []
-        input_value = self.source_input.value.strip()
-        if input_value:
-            matches = re.findall(r'<#(\d+)>', input_value)
-            for match in matches:
+        gc = utils.load_guild_config(self.guild_id)
+        gc["pack_category_view_roles"] = self.role_ids
+        utils.save_guild_config(self.guild_id, gc)
+
+        guild = interaction.guild
+        pack_roles = [r for rid in self.role_ids if (r := guild.get_role(rid))]
+
+        def _ow():
+            ow = {guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)}
+            if pack_roles:
+                ow[guild.default_role] = discord.PermissionOverwrite(view_channel=False)
+                for role in pack_roles:
+                    ow[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
+            else:
+                ow[guild.default_role] = discord.PermissionOverwrite(view_channel=True)
+            return ow
+
+        updated = 0
+        for cat in guild.categories:
+            if not _is_bot_category(cat):
+                continue
+            try:
+                await cat.edit(overwrites=_ow())
+            except Exception:
+                pass
+            for ch in cat.text_channels:
                 try:
-                    ch_id = int(match)
-                    if interaction.guild.get_channel(ch_id):
-                        source_ids.append(ch_id)
-                except ValueError:
+                    await ch.edit(sync_permissions=True)
+                    updated += 1
+                except Exception:
                     pass
-            if not source_ids:
-                for name in [n.strip().strip('#').lower() for n in input_value.split(',') if n.strip()]:
-                    for ch in interaction.guild.text_channels:
-                        if ch.name.lower() == name:
-                            source_ids.append(ch.id)
-                            break
-        guild_config = utils.load_guild_config(self.guild_id)
-        guild_config["default_source_channel_ids"] = source_ids
-        if "keyword_channel_map" in guild_config:
-            for cfg in guild_config["keyword_channel_map"].values():
-                cfg["source_channel_ids"] = source_ids[:]
-        if "pack_channel_map" in guild_config:
-            for cfg in guild_config["pack_channel_map"].values():
-                cfg["source_channel_ids"] = source_ids[:]
-        utils.save_guild_config(self.guild_id, guild_config)
-        sources_mention = ', '.join([f'<#{sid}>' for sid in source_ids]) if source_ids else "All channels"
+
+        if self.role_ids:
+            desc = "Bot channels **hidden** from @everyone, **visible** to: " + ", ".join(f"<@&{r}>" for r in self.role_ids)
+        else:
+            desc = "No role restriction — bot channels visible to everyone."
+        if updated:
+            desc += f"\n✅ Updated {updated} channel(s) across all bot categories."
         await interaction.followup.send(
-            embed=discord.Embed(title="✅ Sources Updated", description=f"Source channels: {sources_mention}", color=discord.Color.green()),
-            ephemeral=True
+            embed=discord.Embed(title="✅ Channel Access Roles Saved", description=desc, color=discord.Color.green()),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="🗑 Clear (Allow Everyone)", style=discord.ButtonStyle.danger, row=1)
+    async def clear(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        gc = utils.load_guild_config(self.guild_id)
+        gc["pack_category_view_roles"] = []
+        utils.save_guild_config(self.guild_id, gc)
+        guild = interaction.guild
+        open_ow = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+        }
+        updated = 0
+        for cat in guild.categories:
+            if not _is_bot_category(cat):
+                continue
+            try:
+                await cat.edit(overwrites=open_ow)
+            except Exception:
+                pass
+            for ch in cat.text_channels:
+                try:
+                    await ch.edit(sync_permissions=True)
+                    updated += 1
+                except Exception:
+                    pass
+        desc = "All bot channels visible to everyone."
+        if updated:
+            desc += f"\n✅ Updated {updated} channel(s)."
+        await interaction.followup.send(
+            embed=discord.Embed(title="✅ Roles Cleared", description=desc, color=discord.Color.green()),
+            ephemeral=True,
         )
 
 
@@ -136,6 +254,7 @@ class SetSelectView(discord.ui.View):
                 discord.SelectOption(label="Validator Role", value="validatorrole", description="Role allowed to use validation buttons", emoji="🛡️"),
                 discord.SelectOption(label="Ping Roles", value="pingroles", description="Set ping roles for god pack / safe trade", emoji="🔔"),
                 discord.SelectOption(label="Sources", value="sources", description="Set or reset source channels", emoji="📡"),
+                discord.SelectOption(label="Channel Access Roles", value="packroles", description="Roles that can see all bot-managed categories", emoji="🔒"),
             ]
         )
         select.callback = self.on_select
@@ -159,10 +278,36 @@ class SetSelectView(discord.ui.View):
             )
 
         elif choice == "heartbeat":
-            await interaction.response.send_modal(HeartbeatModal())
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    title="💓 Configure Heartbeat",
+                    description="**Step 1:** Select source channel(s) where the heartbeat bot posts.\n**Step 2:** Select the target channel where the embed should appear.\n**Step 3:** Click Save.",
+                    color=discord.Color.blue(),
+                ),
+                view=HeartbeatConfigView(self.guild_id),
+            )
+
+        elif choice == "packroles":
+            gc = utils.load_guild_config(self.guild_id)
+            current_ids = gc.get("pack_category_view_roles", [])
+            current_str = ", ".join(f"<@&{r}>" for r in current_ids) if current_ids else "Everyone (no restriction)"
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    title="🔒 Pack Category Roles",
+                    description=f"**Current:** {current_str}\n\nSelect the roles that can see all bot-managed categories (Save 4 Trade, God Packs, Detection, Series, Pack-specific). @everyone gets hidden.",
+                    color=discord.Color.blue(),
+                ),
+                view=PackRoleView(self.guild_id),
+            )
 
         elif choice == "validatorrole":
-            await interaction.response.send_modal(ValidatorRoleModal())
+            gc = utils.load_guild_config(self.guild_id)
+            current = gc.get("validator_role_id")
+            current_str = f"<@&{current}>" if current else "*not set*"
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="🛡️ Validator Role", description=f"**Current:** {current_str}\n\nSelect the role allowed to use validation buttons.", color=discord.Color.blue()),
+                view=ValidatorRoleView(self.guild_id),
+            )
 
         elif choice == "pingroles":
             roles = sorted(interaction.guild.roles, key=lambda r: r.position, reverse=True)[:25]
@@ -211,42 +356,12 @@ class SetSelectView(discord.ui.View):
             )
 
         elif choice == "sources":
-            guild_id = self.guild_id
-            gc = utils.load_guild_config(guild_id)
+            gc = utils.load_guild_config(self.guild_id)
             current_sources = gc.get("default_source_channel_ids", [])
             sources_mention = ', '.join([f'<#{sid}>' for sid in current_sources]) if current_sources else "All channels"
-
-            class SourceOptionsView(discord.ui.View):
-                def __init__(self):
-                    super().__init__(timeout=300)
-
-                @discord.ui.button(label="Set New Sources", style=discord.ButtonStyle.primary)
-                async def btn_set(self_inner, inter: discord.Interaction, button: discord.ui.Button):
-                    modal = SourceModal()
-                    modal.guild_id = guild_id
-                    modal.original_user = inter.user
-                    await inter.response.send_modal(modal)
-
-                @discord.ui.button(label="Reset to All Channels", style=discord.ButtonStyle.danger)
-                async def btn_reset(self_inner, inter: discord.Interaction, button: discord.ui.Button):
-                    await inter.response.defer(ephemeral=True)
-                    gc2 = utils.load_guild_config(guild_id)
-                    old = gc2.get("default_source_channel_ids", [])
-                    gc2["default_source_channel_ids"] = []
-                    for cfg in gc2.get("keyword_channel_map", {}).values():
-                        cfg["source_channel_ids"] = []
-                    for cfg in gc2.get("pack_channel_map", {}).values():
-                        cfg["source_channel_ids"] = []
-                    utils.save_guild_config(guild_id, gc2)
-                    old_mention = ', '.join([f'<#{sid}>' for sid in old]) if old else "None"
-                    await inter.followup.send(
-                        embed=discord.Embed(title="✅ Sources Reset", description=f"**Previous:** {old_mention}\n**New:** All channels", color=discord.Color.green()),
-                        ephemeral=True
-                    )
-
             await interaction.response.edit_message(
-                embed=discord.Embed(title="📡 Manage Source Channels", description=f"**Current:** {sources_mention}", color=discord.Color.blue()),
-                view=SourceOptionsView()
+                embed=discord.Embed(title="📡 Source Channels", description=f"**Current:** {sources_mention}\n\nSelect up to 25 channels to listen to. Click Reset to listen to all.", color=discord.Color.blue()),
+                view=SourceChannelView(self.guild_id)
             )
 
 
@@ -486,6 +601,9 @@ class ConfigCog(commands.Cog):
 
         sources = gc.get("default_source_channel_ids", [])
         embed.add_field(name="📡 Sources", value=", ".join([f"<#{sid}>" for sid in sources]) if sources else "All channels", inline=False)
+
+        pack_role_ids = gc.get("pack_category_view_roles", [])
+        embed.add_field(name="🔒 Channel Access Roles", value=", ".join(f"<@&{r}>" for r in pack_role_ids) if pack_role_ids else "Everyone (no restriction)", inline=False)
 
         return embed
 
