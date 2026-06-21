@@ -947,11 +947,15 @@ def create_stats_embed(guild_config):
         value=f"Total: {godpacks['total']}\nValid: {godpacks['valid']}\nInvalid: {godpacks['invalid']}",
         inline=False
     )
+    filter_stats = guild_config.get("filter_stats", {})
+    s4t_rarities = ["one star", "three diamond", "four diamond ex", "gimmighoul", "shiny", "shiny ex", "rainbow", "full art", "trainer", "two star"]
+    s4t_total = sum(filter_stats.get(r, 0) for r in s4t_rarities)
     general = stats.get('general', {'total': 0, 'valid': 0})
-    available = general['total'] - general['valid']
+    traded = general.get('valid', 0)
+    available = s4t_total - traded
     embed.add_field(
         name="Safe 4 Trade",
-        value=f"Total: {general['total']}\nTraded: {general['valid']}\nAvailable: {available}",
+        value=f"Total: {s4t_total}\nTraded: {traded}\nAvailable: {available}",
         inline=False
     )
     return embed
