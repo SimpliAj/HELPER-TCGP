@@ -540,7 +540,7 @@ class EventsCog(commands.Cog):
                 name=utils.CUSTOM_AUTHOR_TEXT.get(keyword, utils.LOCALE_TEXT["embed_author_name"]),
                 icon_url="https://imgur.com/T0KX069.png"
             )
-            embed.set_footer(text="Forwarded by HELPER ¦ TCGP", icon_url="https://imgur.com/T0KX069.png")
+            embed.set_footer(text="Provided by Team G ¦ HELPER TCGP Discord Bot", icon_url="https://imgur.com/T0KX069.png")
             thumbnail_url = utils.EMBED_THUMBNAILS.get(keyword)
             if thumbnail_url:
                 embed.set_thumbnail(url=thumbnail_url)
@@ -658,7 +658,7 @@ class EventsCog(commands.Cog):
                     color=discord.Color.blue()
                 )
                 embed.set_author(name=utils.LOCALE_TEXT["embed_author_name"], icon_url="https://imgur.com/T0KX069.png")
-                embed.set_footer(text="Forwarded by HELPER ¦ TCGP", icon_url="https://imgur.com/T0KX069.png")
+                embed.set_footer(text="Provided by Team G ¦ HELPER TCGP Discord Bot", icon_url="https://imgur.com/T0KX069.png")
                 for attachment in message.attachments:
                     if attachment.content_type and "image" in attachment.content_type:
                         embed.set_image(url=attachment.url)

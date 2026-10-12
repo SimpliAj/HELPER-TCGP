@@ -1,13 +1,41 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import random
 import utils
 
 
+STATUS_ROTATION = [
+    discord.Game("Pok\u00e9mon TCG Pocket"),
+    discord.Activity(type=discord.ActivityType.watching, name="cards get sorted"),
+    discord.Game("/teamg"),
+    discord.Activity(type=discord.ActivityType.watching, name="www.gpackfarm.xyz"),
+]
+
+
 class GeneralCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._status_index = 0
+
+    async def cog_load(self):
+        self.rotate_status.start()
+
+    async def cog_unload(self):
+        self.rotate_status.cancel()
+
+    @tasks.loop(minutes=30)
+    async def rotate_status(self):
+        activity = STATUS_ROTATION[self._status_index % len(STATUS_ROTATION)]
+        self._status_index += 1
+        try:
+            await self.bot.change_presence(status=discord.Status.online, activity=activity)
+        except Exception as e:
+            print(f"status rotation failed: {e}")
+
+    @rotate_status.before_loop
+    async def before_rotate_status(self):
+        await self.bot.wait_until_ready()
 
     @app_commands.command(name="pick4me", description="Let fate decide which card you get!")
     async def pick4me(self, interaction: discord.Interaction):
@@ -138,6 +166,27 @@ class GeneralCog(commands.Cog):
         embed.add_field(name="**Websites:**", value="[Pokemon Zone](https://www.pokemon-zone.com/decks)\n[PTCGPOCKET](https://ptcgpocket.gg/)", inline=False)
         await interaction.followup.send(embed=embed)
 
+    @app_commands.command(name="teamg", description="Learn about Team G godpack farming")
+    async def teamg(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🚜 Team G – Godpack Farming for Pokémon TCG Pocket",
+            description="Team G is a service where you can farm godpacks for Pok\u00e9mon TCG Pocket \u2013 and use a lot of other tools around it.",
+            color=discord.Color.orange()
+        )
+        embed.add_field(
+            name="What you get",
+            value="• Automatic godpack farming\n• Godpack alerts (Discord DM / webhook)\n• Auto Trade & Auto Complete\n• Daily automations (login, missions, gift, likes, card share)\n• Web dashboard and Discord commands",
+            inline=False
+        )
+        embed.add_field(
+            name="Links",
+            value="[Dashboard](https://dashboard.gpackfarm.xyz) · [Website](https://www.gpackfarm.xyz) · [Join the Team G Discord](https://discord.gg/ESFw9tXKj)",
+            inline=False
+        )
+        embed.set_thumbnail(url="https://dashboard.gpackfarm.xyz/assets/logo.png")
+        embed.set_footer(text="Provided by Team G ¦ HELPER TCGP Discord Bot", icon_url="https://imgur.com/T0KX069.png")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="help", description="Shows an overview of all bot commands")
     async def help(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
@@ -150,7 +199,7 @@ class GeneralCog(commands.Cog):
 
         embed.add_field(
             name="🎮 Fun & Meta",
-            value="**/meta** – Current TCGP meta decks (links to guides)\n**/pick4me** – Decides for you on a wonder pick",
+            value="**/meta** – Current TCGP meta decks (links to guides)\n**/pick4me** – Decides for you on a wonder pick\n**/teamg** – About Team G godpack farming (private reply)",
             inline=False
         )
         embed.add_field(

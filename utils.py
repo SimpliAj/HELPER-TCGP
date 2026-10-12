@@ -798,7 +798,7 @@ LOCALE_TEXT = {
     "bot_started": "Bot started as {bot_name}",
     "embed_title": "Found: {keyword}",
     "embed_link_text": "[Go to original message]({link})",
-    "embed_footer": "Forwarded by HELPER ¦ TCGP",
+    "embed_footer": "Provided by Team G ¦ HELPER TCGP Discord Bot",
     "embed_author_name": "Save 4 Trade",
 }
 
