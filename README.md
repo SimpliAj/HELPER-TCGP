@@ -8,7 +8,7 @@
 [![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](README.md)
 
 
- [Invite Discord Bot](https://discord.com/oauth2/authorize?client_id=1389046915928162424&permissions=268437520&integration_type=0&scope=bot)
+ [Invite Discord Bot](https://discord.com/channels/1330305075393986703/1433117463104585958/1433117463104585958)
 
 ## ✨ Features
 
@@ -293,11 +293,31 @@ Important events are logged in the console:
 - Task executions
 - Errors & warnings
 
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
 ## 👨‍💼 Support
 
 Having issues or questions?
-- 💬 [Discord](https://discord.gg/X5YKZBh9xV)
-
+- 🐛 [Open an issue](https://github.com/yourusername/tcgp-bot/issues)
+- 💬 [Start a discussion](https://github.com/yourusername/tcgp-bot/discussions)
+- 📧 Contact the maintainer
 
 ---
+
+**Made with ❤️ for the TCG Pokémon Community**
+
+**Version:** 1.0.0  
+**Status:** Production Ready ✅  
+**Last Updated:** March 2026  
+**Bot Architecture:** Monolithic (Single bot.py, 5000+ lines)

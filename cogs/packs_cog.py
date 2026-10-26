@@ -394,7 +394,7 @@ class PacksCog(commands.Cog):
             if not interaction.guild:
                 await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
                 return
-            member = interaction.guild.get_member(interaction.user.id)
+            member = interaction.user if isinstance(interaction.user, discord.Member) else interaction.guild.get_member(interaction.user.id)
             if not member or not member.guild_permissions.administrator:
                 embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
                 await interaction.followup.send(embed=embed, ephemeral=True)

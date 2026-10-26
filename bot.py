@@ -13,7 +13,7 @@ intents.guilds = True
 intents.members = True
 intents.reactions = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, chunk_guilds_at_startup=False, member_cache_flags=discord.MemberCacheFlags.none())
 
 EXTENSIONS = [
     "cogs.events_cog",

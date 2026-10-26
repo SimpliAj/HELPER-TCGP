@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "url": "https://www.gpackfarm.xyz/",
+  "button_label": "Farm 24/7 – gpackfarm.xyz",
+  "button_emoji": "🚜",
+  "stats_block": "🚜 **Team G** — god packs farmed for you in the cloud, 24/7. No PC, no emulators.",
+  "setup_block": "Tired of running emulators all day? **Team G** farms god packs for you in the cloud, 24/7 — wishlist hits, Godpacks-Only mode, trade credits and Professor Research. Plans from €10/mo.",
+  "disabled_guilds": []
+}

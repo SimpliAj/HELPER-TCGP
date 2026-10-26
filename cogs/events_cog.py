@@ -34,7 +34,7 @@ class DevCommandView(discord.ui.View):
             await interaction.response.send_message("❌ Du darfst das nicht!", ephemeral=True)
             return
         guild_count = len(utils._bot.guilds)
-        user_count = sum(len(g.members) for g in utils._bot.guilds)
+        user_count = sum(g.member_count or 0 for g in utils._bot.guilds)
         uptime = datetime.now(utils.BERLIN_TZ) - utils._bot.start_time if hasattr(utils._bot, 'start_time') else "Unknown"
         config_file_size = os.path.getsize(utils.CONFIG_FILE) if os.path.exists(utils.CONFIG_FILE) else 0
         guild_configs_count = len([f for f in os.listdir(utils.GUILD_CONFIG_DIR) if f.endswith('.json')]) if os.path.exists(utils.GUILD_CONFIG_DIR) else 0
@@ -580,7 +580,7 @@ class EventsCog(commands.Cog):
             sent_message = None
             for target_channel, is_primary in send_targets:
                 try:
-                    msg = await target_channel.send(embed=embed, view=view if is_primary else None)
+                    msg = await target_channel.send(embed=embed, view=utils.add_promo_button(view, guild_id) if is_primary else utils.add_promo_button(None, guild_id))
                     if is_primary:
                         sent_message = msg
                 except Exception as e:
@@ -671,7 +671,7 @@ class EventsCog(commands.Cog):
                 utils.PENDING_STATS_GUILDS.add(guild_id)
 
                 try:
-                    await target_channel.send(embed=embed)
+                    await target_channel.send(embed=embed, view=utils.add_promo_button(None, guild_id))
                 except Exception as e:
                     if utils.DEBUG_PACK_LOGS:
                         print(f"Error sending embed for pack '{pack}' to channel {target_channel_id}: {e}")

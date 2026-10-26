@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 .env
 *.bak*
+
+# runtime data / local
+guild_configs/
+lifetime_stats_messages.json
+bot_original.py
+/packs_cog.py
+.claude/
+*.draft

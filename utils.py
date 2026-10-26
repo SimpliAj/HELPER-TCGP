@@ -675,13 +675,24 @@ class CorruptionRecoveryView(discord.ui.View):
             await interaction.followup.send(f"❌ Error resetting config: {str(e)[:100]}", ephemeral=True)
 
 
+async def fetch_guild_owner(guild):
+    if guild.owner:
+        return guild.owner
+    if not guild.owner_id:
+        return None
+    try:
+        return await guild.fetch_member(guild.owner_id)
+    except discord.HTTPException:
+        return None
+
+
 async def notify_guild_owner_corruption(guild_id: str, error_message: str, recovery_action: str = None):
     try:
         guild = _bot.get_guild(int(guild_id)) if _bot else None
         if not guild:
             print(f"⚠️ Guild {guild_id} not found for corruption notification")
             return
-        owner = guild.owner
+        owner = await fetch_guild_owner(guild)
         if not owner:
             print(f"⚠️ Guild {guild_id} has no owner")
             return
@@ -1193,7 +1204,13 @@ async def _edit_or_replace(channel, message_id, embed, guild_config, guild_id, i
     """Edit a message; if Discord blocks edits on old messages (30046), send a new one and update config."""
     try:
         message = await channel.fetch_message(message_id)
-        await message.edit(embed=embed)
+        view = None
+        if msg_key in ("stats_message_id", "detailed_stats_message_id", "pack_stats_message_id"):
+            block = promo_stats_block(guild_id)
+            if block:
+                embed.add_field(name="\u200b", value=block, inline=False)
+                view = add_promo_button(None, guild_id)
+        await message.edit(embed=embed, view=view)
     except discord.NotFound:
         guild_config.pop(id_key, None)
         guild_config.pop(msg_key, None)
@@ -1331,9 +1348,9 @@ def split_field_value(value, max_len=1024, field_name="Field"):
 async def notify_admin_of_missing_configs(guild_id, missing_packs, missing_filters):
     try:
         guild = _bot.get_guild(int(guild_id)) if _bot else None
-        if not guild or not guild.owner:
+        owner = await fetch_guild_owner(guild) if guild else None
+        if not owner:
             return
-        owner = guild.owner
         message_parts = []
         if missing_packs:
             packs_list = ", ".join(sorted(missing_packs))
@@ -1360,3 +1377,57 @@ async def notify_admin_of_missing_configs(guild_id, missing_packs, missing_filte
         print(f"Could not DM owner of guild {guild_id} (DMs disabled)")
     except Exception as e:
         print(f"Error notifying admin of missing configs: {e}")
+
+
+# ── Team G promo (2026-10-26) ─────────────────────────────────────────────
+# promo.json (edit without code changes): enabled, url, button_label, button_emoji, stats_block, setup_block,
+# disabled_guilds (guild ids as strings). Used for: link button under relayed packs, Team G block on the stats
+# messages, Team G intro after /setup.
+_PROMO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "promo.json")
+_PROMO_CACHE = {"mtime": 0, "cfg": {}}
+
+
+def _promo_cfg():
+    try:
+        m = os.path.getmtime(_PROMO_PATH)
+        if m != _PROMO_CACHE["mtime"]:
+            with open(_PROMO_PATH, encoding="utf-8") as f:
+                _PROMO_CACHE["cfg"] = json.load(f)
+            _PROMO_CACHE["mtime"] = m
+    except Exception as e:
+        print(f"[promo] config load failed: {e}")
+        _PROMO_CACHE["cfg"] = {}
+    return _PROMO_CACHE["cfg"]
+
+
+def _promo_active(guild_id):
+    cfg = _promo_cfg()
+    return bool(cfg.get("enabled")) and str(guild_id) not in [str(g) for g in cfg.get("disabled_guilds", [])]
+
+
+def promo_url(guild_id):
+    base = _promo_cfg().get("url", "https://www.gpackfarm.xyz/")
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}ref=helper&g={guild_id}&utm_source=tcgphelper&utm_medium=discord"
+
+
+def add_promo_button(view, guild_id):
+    """Adds the Team G link button to view (or a new view). Returns the view to send (unchanged if promo is off)."""
+    if not _promo_active(guild_id):
+        return view
+    cfg = _promo_cfg()
+    v = view if view is not None else discord.ui.View(timeout=None)
+    try:
+        v.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=cfg.get("button_label", "gpackfarm.xyz"),
+                                     emoji=cfg.get("button_emoji") or None, url=promo_url(guild_id)))
+    except Exception as e:
+        print(f"[promo] button failed: {e}")
+    return v
+
+
+def promo_stats_block(guild_id):
+    return _promo_cfg().get("stats_block") if _promo_active(guild_id) else None
+
+
+def promo_setup_block(guild_id):
+    return _promo_cfg().get("setup_block") if _promo_active(guild_id) else None

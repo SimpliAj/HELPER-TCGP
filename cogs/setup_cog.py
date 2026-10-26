@@ -403,7 +403,7 @@ class HeartbeatSetupView(discord.ui.View):
             return
         await interaction.response.defer()
         final_embed = self.build_final_embed(interaction.guild)
-        await interaction.followup.send(embed=final_embed, ephemeral=True)
+        await interaction.followup.send(embed=final_embed, view=utils.add_promo_button(None, self.guild_id), ephemeral=True)
         self.stop()
 
     def build_final_embed(self, guild):
@@ -433,6 +433,9 @@ class HeartbeatSetupView(discord.ui.View):
             ),
             color=discord.Color.green()
         )
+        intro = utils.promo_setup_block(self.guild_id)
+        if intro:
+            final_embed.add_field(name="🚜 Brought to you by Team G", value=intro, inline=False)
         return final_embed
 
 
@@ -447,7 +450,7 @@ class SetupCog(commands.Cog):
     @app_commands.command(name="setup", description="Automated setup for bot channels, categories, and configurations (Admin only)")
     async def setup(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        member = interaction.guild.get_member(interaction.user.id)
+        member = interaction.user if isinstance(interaction.user, discord.Member) else interaction.guild.get_member(interaction.user.id)
         if member is None:
             embed = discord.Embed(title="Error", description="Unable to fetch your member information. Please try again.", color=discord.Color.red())
             await interaction.followup.send(embed=embed, ephemeral=True)
