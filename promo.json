@@ -5,5 +5,14 @@
   "button_emoji": "🚜",
   "stats_block": "🚜 **Team G** — god packs farmed for you in the cloud, 24/7. No PC, no emulators.",
   "setup_block": "Tired of running emulators all day? **Team G** farms god packs for you in the cloud, 24/7 — wishlist hits, Godpacks-Only mode, trade credits and Professor Research. Plans from €10/mo.",
-  "disabled_guilds": []
+  "disabled_guilds": [],
+  "line_every": 10,
+  "lines": [
+    "🚜 **Tired of running emulators?** Team G farms god packs for you in the cloud, 24/7 — from €10/mo.",
+    "💎 **No PC, no setup.** Get god packs farmed while you sleep with Team G.",
+    "🎯 **Wishlist hits & Godpacks-Only mode** — let Team G hunt your next god pack.",
+    "🔁 **Need trade credits or Professor's Research?** Team G has you covered."
+  ],
+  "weekly_report": true,
+  "weekly_block": "🚜 Want more god packs without running emulators? **Team G** farms them for you in the cloud, 24/7 — plans from €10/mo."
 }

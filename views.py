@@ -34,7 +34,8 @@ class GodPackValidationView(discord.ui.View):
     async def disable_all_buttons(self, interaction: discord.Interaction):
         self.disabled = True
         for child in self.children:
-            child.disabled = True
+            if getattr(child, "style", None) != discord.ButtonStyle.link:  # keep the Team G link usable
+                child.disabled = True
         await self.original_message.edit(embed=self.embed, view=self)
 
     @discord.ui.button(label="✅ Valid", style=discord.ButtonStyle.success, custom_id="godpack_valid")
@@ -159,7 +160,8 @@ class TradedView(discord.ui.View):
     async def disable_all_buttons(self, interaction: discord.Interaction):
         self.disabled = True
         for child in self.children:
-            child.disabled = True
+            if getattr(child, "style", None) != discord.ButtonStyle.link:  # keep the Team G link usable
+                child.disabled = True
         await self.original_message.edit(embed=self.embed, view=self)
 
     @discord.ui.button(label="✅ Traded", style=discord.ButtonStyle.success, custom_id="traded")

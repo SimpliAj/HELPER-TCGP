@@ -10,3 +10,4 @@ bot_original.py
 /packs_cog.py
 .claude/
 *.draft
+promo_state.json

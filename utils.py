@@ -1431,3 +1431,20 @@ def promo_stats_block(guild_id):
 
 def promo_setup_block(guild_id):
     return _promo_cfg().get("setup_block") if _promo_active(guild_id) else None
+
+
+_PROMO_COUNTERS = {}
+
+
+def promo_line(guild_id):
+    """Every Nth relayed embed per guild (promo.json line_every, default 10) gets the next promo line, else None."""
+    if not _promo_active(guild_id):
+        return None
+    cfg = _promo_cfg()
+    lines = cfg.get("lines") or []
+    every = max(1, int(cfg.get("line_every", 10) or 10))
+    n = _PROMO_COUNTERS.get(str(guild_id), 0) + 1
+    _PROMO_COUNTERS[str(guild_id)] = n
+    if not lines or n % every != 0:
+        return None
+    return lines[(n // every - 1) % len(lines)]

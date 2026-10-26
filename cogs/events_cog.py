@@ -577,10 +577,15 @@ class EventsCog(commands.Cog):
             utils.save_guild_config(guild_id, guild_config)
             utils.PENDING_STATS_GUILDS.add(guild_id)
 
+            promo_ok = keyword in ("god pack", "invalid god pack")  # ads only on god pack found / invalid god pack
+            promo = utils.promo_line(guild_id) if promo_ok else None
+            if promo:
+                embed.add_field(name="\u200b", value=promo, inline=False)
+
             sent_message = None
             for target_channel, is_primary in send_targets:
                 try:
-                    msg = await target_channel.send(embed=embed, view=utils.add_promo_button(view, guild_id) if is_primary else utils.add_promo_button(None, guild_id))
+                    msg = await target_channel.send(embed=embed, view=(utils.add_promo_button(view, guild_id) if promo_ok else view) if is_primary else (utils.add_promo_button(None, guild_id) if promo_ok else None))
                     if is_primary:
                         sent_message = msg
                 except Exception as e:
@@ -671,7 +676,7 @@ class EventsCog(commands.Cog):
                 utils.PENDING_STATS_GUILDS.add(guild_id)
 
                 try:
-                    await target_channel.send(embed=embed, view=utils.add_promo_button(None, guild_id))
+                    await target_channel.send(embed=embed)
                 except Exception as e:
                     if utils.DEBUG_PACK_LOGS:
                         print(f"Error sending embed for pack '{pack}' to channel {target_channel_id}: {e}")
