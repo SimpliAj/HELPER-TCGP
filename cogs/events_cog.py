@@ -4,6 +4,7 @@ import asyncio
 import os
 import re
 import sys
+import hashlib
 import json
 import time
 from datetime import datetime, timedelta
@@ -149,13 +150,25 @@ class EventsCog(commands.Cog):
                 await asyncio.sleep(60)
                 current_time = time.time()
                 for guild_id, config_data in list(utils.missing_configs.items()):
-                    if config_data["packs"] or config_data["filters"]:
-                        if config_data["last_notified"] == 0 and (current_time - config_data.get("first_reported", current_time)) > 1800:
-                            await utils.notify_admin_of_missing_configs(guild_id, config_data["packs"], config_data["filters"])
-                            config_data["last_notified"] = current_time
-                        elif config_data["last_notified"] > 0 and (current_time - config_data["last_notified"]) > 43200:
-                            await utils.notify_admin_of_missing_configs(guild_id, config_data["packs"], config_data["filters"])
-                            config_data["last_notified"] = current_time
+                    if not (config_data["packs"] or config_data["filters"]):
+                        continue
+                    if (current_time - config_data.get("first_reported", current_time)) <= 1800:
+                        continue
+                    # notify once per distinct set of missing items (hash persisted in guild config), never on a timer
+                    gc = await asyncio.to_thread(utils.load_guild_config, guild_id)
+                    if gc.get("config_check_off"):
+                        continue
+                    # drop items that have been configured since (e.g. after /setup)
+                    config_data["filters"] = {k for k in config_data["filters"] if k.lower() not in gc.get("keyword_channel_map", {})}
+                    config_data["packs"] = {k for k in config_data["packs"] if k.lower() not in gc.get("pack_channel_map", {})}
+                    if not (config_data["packs"] or config_data["filters"]):
+                        continue
+                    h = hashlib.sha1(json.dumps([sorted(config_data["packs"]), sorted(config_data["filters"])]).encode()).hexdigest()
+                    if gc.get("missing_notified_hash") == h:
+                        continue
+                    await utils.notify_admin_of_missing_configs(guild_id, config_data["packs"], config_data["filters"])
+                    gc["missing_notified_hash"] = h
+                    await asyncio.to_thread(utils.save_guild_config_sync, guild_id, gc)
 
         asyncio.create_task(check_and_notify_missing_configs())
 

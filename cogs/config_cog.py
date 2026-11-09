@@ -621,6 +621,19 @@ class ConfigCog(commands.Cog):
         embed = self._build_config_embed(interaction.guild, gc)
         await interaction.followup.send(embed=embed, view=SetSelectView(guild_id), ephemeral=True)
 
+    @app_commands.command(name="configcheck", description="Turn the missing-configuration notice DMs on or off (Admin only)")
+    @app_commands.choices(state=[app_commands.Choice(name="off", value="off"), app_commands.Choice(name="on", value="on")])
+    async def configcheck_cmd(self, interaction: discord.Interaction, state: str):
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
+            return
+        guild_id = str(interaction.guild.id)
+        gc = utils.load_guild_config(guild_id)
+        gc["config_check_off"] = state == "off"
+        utils.save_guild_config(guild_id, gc)
+        await interaction.followup.send(embed=discord.Embed(title="Config check", description=f"Missing-configuration notices are now **{state}** for this server.", color=discord.Color.green()), ephemeral=True)
+
     @app_commands.command(name="filters", description="View and manage active filters (Admin only)")
     async def filters_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)

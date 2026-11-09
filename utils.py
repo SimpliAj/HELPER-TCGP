@@ -1370,7 +1370,7 @@ async def notify_admin_of_missing_configs(guild_id, missing_packs, missing_filte
                   "Or re-run `/setup` to auto-configure everything.",
             inline=False
         )
-        embed.set_footer(text="These configs are needed to route notifications correctly.")
+        embed.set_footer(text="These configs are needed to route notifications correctly. Turn these notices off with /configcheck off")
         await owner.send(embed=embed)
         print(f"Sent missing config notification to {owner} ({guild.name})")
     except discord.Forbidden:

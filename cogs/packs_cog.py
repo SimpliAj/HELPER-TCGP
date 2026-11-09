@@ -552,39 +552,8 @@ class PacksCog(commands.Cog):
             await self.bot.tree.sync()
         except Exception:
             pass
-        created_count = 0
-        utils.ensure_guild_config_dir()
-        if os.path.exists(utils.GUILD_CONFIG_DIR):
-            for config_file in os.listdir(utils.GUILD_CONFIG_DIR):
-                if not config_file.startswith("guild_") or not config_file.endswith(".json"):
-                    continue
-                guild_id_str = config_file.replace("guild_", "").replace(".json", "")
-                try:
-                    guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
-                    guild = self.bot.get_guild(int(guild_id_str))
-                    if not guild or "pack_channel_mode" not in guild_config:
-                        continue
-                    category = discord.utils.get(guild.categories, name=series_name)
-                    if not category:
-                        overwrites = {
-                            guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                        }
-                        category = await guild.create_category(series_name, overwrites=overwrites)
-                    channel_name = series_name.lower().replace(" ", "-") + "-packs"
-                    if not discord.utils.get(category.text_channels, name=channel_name):
-                        overwrites = {
-                            guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                        }
-                        await category.create_text_channel(channel_name, overwrites=overwrites)
-                    if "pack_channel_map" not in guild_config:
-                        guild_config["pack_channel_map"] = {}
-                    utils.save_guild_config(guild_id_str, guild_config)
-                    created_count += 1
-                except Exception as e:
-                    print(f"[AutoSync] Error creating series in guild {guild_id_str}: {e}")
-        return created_count
+        # no category/channel auto-creation: only explicit admin commands (/setup, /addseries) create channels
+        return 0
 
     async def _auto_add_pack(self, pack_name: str, series: str) -> int:
         pack_lower = pack_name.lower().strip()
@@ -607,6 +576,8 @@ class PacksCog(commands.Cog):
                 if not config_file.startswith("guild_") or not config_file.endswith(".json"):
                     continue
                 guild_id_str = config_file.replace("guild_", "").replace(".json", "")
+                if not guild_id_str.isdigit():
+                    continue
                 try:
                     guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
                     guild = self.bot.get_guild(int(guild_id_str))
@@ -620,11 +591,7 @@ class PacksCog(commands.Cog):
                         channel_name = series.lower().replace(" ", "-") + "-packs"
                         target_channel = discord.utils.get(category.text_channels, name=channel_name)
                         if not target_channel:
-                            overwrites = {
-                                guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                                guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                            }
-                            target_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
+                            continue
                         for p in utils.config["series"][series]:
                             if "pack_channel_map" not in guild_config:
                                 guild_config["pack_channel_map"] = {}
@@ -636,11 +603,7 @@ class PacksCog(commands.Cog):
                         channel_name = pack_lower + "-pack"
                         target_channel = discord.utils.get(category.text_channels, name=channel_name)
                         if not target_channel:
-                            overwrites = {
-                                guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                                guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-                            }
-                            target_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
+                            continue
                         if "pack_channel_map" not in guild_config:
                             guild_config["pack_channel_map"] = {}
                         guild_config["pack_channel_map"][pack_lower] = {

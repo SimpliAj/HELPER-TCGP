@@ -585,6 +585,7 @@ class SetupCog(commands.Cog):
                                         "source_channel_ids": []
                                     }
                     utils.save_guild_config(guild_id, guild_config)
+                    utils.missing_configs.pop(guild_id, None)
 
                     mode_embed = discord.Embed(
                         title="✅ Keyword Channels Created! – Step 1: Choose Pack Channel Mode",
