@@ -295,6 +295,24 @@ def save_guild_config_sync(guild_id, guild_config):
             print(f"Error saving guild config for {guild_id}: {e}")
 
 
+def set_guild_config_field_sync(guild_id, key, value):
+    """Reload + set one key + write under the save lock, so a concurrent admin change is never overwritten by a stale snapshot."""
+    with config_save_lock:
+        ensure_guild_config_dir()
+        config_path = get_guild_config_path(guild_id)
+        try:
+            gc = load_guild_config(guild_id) or {}
+            gc[key] = value
+            tmp_path = config_path + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(gc, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, config_path)
+        except Exception as ex:
+            print(f"Error updating guild config for {guild_id}: {ex}")
+
+
 def get_detections_path(guild_id):
     return os.path.join(GUILD_CONFIG_DIR, f"guild_{guild_id}_detections.json")
 

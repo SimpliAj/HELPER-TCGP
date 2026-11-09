@@ -167,8 +167,7 @@ class EventsCog(commands.Cog):
                     if gc.get("missing_notified_hash") == h:
                         continue
                     await utils.notify_admin_of_missing_configs(guild_id, config_data["packs"], config_data["filters"])
-                    gc["missing_notified_hash"] = h
-                    await asyncio.to_thread(utils.save_guild_config_sync, guild_id, gc)
+                    await asyncio.to_thread(utils.set_guild_config_field_sync, guild_id, "missing_notified_hash", h)
 
         asyncio.create_task(check_and_notify_missing_configs())
 
