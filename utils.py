@@ -313,6 +313,13 @@ def set_guild_config_field_sync(guild_id, key, value):
             print(f"Error updating guild config for {guild_id}: {ex}")
 
 
+SETUP_OFF_MSG = "Setup is turned off on this server. An admin can turn it back on with /setuplock off."
+
+
+def is_setup_disabled(guild_id):
+    return bool((load_guild_config(str(guild_id)) or {}).get("setup_disabled"))
+
+
 def get_detections_path(guild_id):
     return os.path.join(GUILD_CONFIG_DIR, f"guild_{guild_id}_detections.json")
 

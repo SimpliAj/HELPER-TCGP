@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -634,6 +635,19 @@ class ConfigCog(commands.Cog):
         utils.save_guild_config(guild_id, gc)
         await interaction.followup.send(embed=discord.Embed(title="Config check", description=f"Missing-configuration notices are now **{state}** for this server.", color=discord.Color.green()), ephemeral=True)
 
+    @app_commands.command(name="setuplock", description="Turn /setup and automatic pack channel creation off or on for this server (Admin only)")
+    @app_commands.choices(state=[app_commands.Choice(name="off", value="off"), app_commands.Choice(name="on", value="on")])
+    @app_commands.describe(state="on = lock setup (disabled), off = allow setup again")
+    async def setuplock_cmd(self, interaction: discord.Interaction, state: str):
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild or not (interaction.user.id == utils.OWNER_ID or interaction.user.guild_permissions.administrator):
+            await interaction.followup.send(embed=discord.Embed(title="Error", description="Administrator required.", color=discord.Color.red()), ephemeral=True)
+            return
+        locked = state == "on"
+        await asyncio.to_thread(utils.set_guild_config_field_sync, str(interaction.guild.id), "setup_disabled", locked)
+        desc = "Setup is now **turned off** on this server. /setup, /createpackcategory and automatic pack channel creation are disabled. Turn it back on with `/setuplock off`." if locked else "Setup is **turned on** again on this server."
+        await interaction.followup.send(embed=discord.Embed(title="Setup lock", description=desc, color=discord.Color.green()), ephemeral=True)
+
     @app_commands.command(name="filters", description="View and manage active filters (Admin only)")
     async def filters_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -680,7 +694,7 @@ class ConfigCog(commands.Cog):
                 "crown": "Detection", "immersive": "Detection"
             }
             cat_name = keyword_to_cat.get(filter_keyword.lower())
-            if cat_name:
+            if cat_name and not utils.is_setup_disabled(guild_id):
                 category = discord.utils.get(interaction.guild.categories, name=cat_name)
                 if category:
                     clean_name = filter_keyword.lower().replace(" ", "-")
@@ -766,7 +780,7 @@ class ConfigCog(commands.Cog):
         target_channel = channel
         if not target_channel:
             s_name = next((s for s, packs_in_s in utils.config.get("series", {}).items() if any(p.lower() == packs_to_set[0] for p in packs_in_s)), None)
-            if s_name:
+            if s_name and not utils.is_setup_disabled(interaction.guild.id):
                 category = discord.utils.get(interaction.guild.categories, name=s_name)
                 if category:
                     channel_name = f"{s_name.lower().replace(' ', '-')}-packs" if pack_mode == "series" else f"{packs_to_set[0]}-pack"

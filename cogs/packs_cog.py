@@ -66,7 +66,7 @@ class PacksCog(commands.Cog):
                         try:
                             guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
                             guild = self.bot.get_guild(int(guild_id_str))
-                            if not guild or "pack_channel_mode" not in guild_config:
+                            if not guild or "pack_channel_mode" not in guild_config or guild_config.get("setup_disabled"):
                                 continue
                             category = discord.utils.get(guild.categories, name=series_name)
                             if not category:
@@ -149,7 +149,7 @@ class PacksCog(commands.Cog):
                     guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
                     try:
                         guild = self.bot.get_guild(int(guild_id_str))
-                        if not guild or "pack_channel_mode" not in guild_config:
+                        if not guild or "pack_channel_mode" not in guild_config or guild_config.get("setup_disabled"):
                             continue
                         pack_mode = guild_config.get("pack_channel_mode", "series")
                         category = discord.utils.get(guild.categories, name=series)
@@ -258,7 +258,7 @@ class PacksCog(commands.Cog):
                     guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
                     try:
                         guild = self.bot.get_guild(int(guild_id_str))
-                        if not guild or "pack_channel_mode" not in guild_config:
+                        if not guild or "pack_channel_mode" not in guild_config or guild_config.get("setup_disabled"):
                             continue
                         pack_mode = guild_config.get("pack_channel_mode", "series")
                         category = discord.utils.get(guild.categories, name=series_found) if series_found else None
@@ -336,7 +336,7 @@ class PacksCog(commands.Cog):
                     guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
                     try:
                         guild = self.bot.get_guild(int(guild_id_str))
-                        if not guild or "pack_channel_mode" not in guild_config:
+                        if not guild or "pack_channel_mode" not in guild_config or guild_config.get("setup_disabled"):
                             continue
                         category = discord.utils.get(guild.categories, name=series_name)
                         if not category:
@@ -398,6 +398,10 @@ class PacksCog(commands.Cog):
             if not member or not member.guild_permissions.administrator:
                 embed = discord.Embed(title="Error", description="You need administrator permissions to use this command.", color=discord.Color.red())
                 await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+
+            if utils.is_setup_disabled(interaction.guild.id):
+                await interaction.followup.send(utils.SETUP_OFF_MSG, ephemeral=True)
                 return
 
             pack_lower = pack.lower()
@@ -581,7 +585,7 @@ class PacksCog(commands.Cog):
                 try:
                     guild_config = await asyncio.to_thread(utils.load_guild_config, guild_id_str)
                     guild = self.bot.get_guild(int(guild_id_str))
-                    if not guild or "pack_channel_mode" not in guild_config:
+                    if not guild or "pack_channel_mode" not in guild_config or guild_config.get("setup_disabled"):
                         continue
                     pack_mode = guild_config.get("pack_channel_mode", "series")
                     category = discord.utils.get(guild.categories, name=series)

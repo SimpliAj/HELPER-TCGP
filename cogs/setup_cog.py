@@ -462,6 +462,9 @@ class SetupCog(commands.Cog):
 
         guild = interaction.guild
         guild_id = str(guild.id)
+        if utils.is_setup_disabled(guild_id):
+            await interaction.followup.send(utils.SETUP_OFF_MSG, ephemeral=True)
+            return
 
         embed = discord.Embed(
             title="🚀 Bot Setup Wizard",
